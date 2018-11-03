@@ -15,7 +15,7 @@ namespace LevelCombiner
             regionList = new SortedList<int, int>();
         }
 
-        public SortedList<int, int> RegionList { get => regionList; }
+        public SortedList<int, int> RegionList { get { return regionList; } }
 
         public void AddRegion(int start, int length)
         {
@@ -25,7 +25,8 @@ namespace LevelCombiner
             if (length == 0)
                 return;
 
-            regionList.TryGetValue(start, out int prevLength);
+            int prevLength;
+            regionList.TryGetValue(start, out prevLength);
 
             // Key was already there, update value
             if (prevLength != 0)

@@ -14,11 +14,13 @@ namespace LevelCombiner
         delegate void FixParseCmd(ROM rom, DisplayListRegion region, RegionFixState state);
         delegate void OptimizeParserCmd(ROM rom, DisplayListRegion region, RegionOptimizeState state);
         delegate void VisualMapParserCmd(ROM rom, VisualMap map, VisualMapParseState state);
+        delegate void TriangleMapParserCmd(ROM rom, TriangleMap map, TriangleMapParseState state);
 
         static RegionParseCmd[] parser = new RegionParseCmd[0xFF];
         static FixParseCmd[] fixParser = new FixParseCmd[0xFF];
         static OptimizeParserCmd[] optimizeParser = new OptimizeParserCmd[0xFF];
         static VisualMapParserCmd[] visualMapParser = new VisualMapParserCmd[0xFF];
+        static TriangleMapParserCmd[] triangleMapParser = new TriangleMapParserCmd[0xFF];
 
         static DisplayList()
         {
@@ -85,6 +87,22 @@ namespace LevelCombiner
                     continue;
 
                 visualMapParser[i] = cmd;
+            }
+
+            for (int i = 0; i < 0xFF; i++)
+            {
+                triangleMapParser[i] = TriangleMapParse_common;
+
+                string name = "TriangleMapParse_cmd" + string.Format("{0:X2}", i);
+                MethodInfo info = t.GetMethod(name, BindingFlags.NonPublic | BindingFlags.Static);
+                if (info == null)
+                    continue;
+
+                TriangleMapParserCmd cmd = Delegate.CreateDelegate(typeof(TriangleMapParserCmd), info) as TriangleMapParserCmd;
+                if (cmd == null)
+                    continue;
+
+                triangleMapParser[i] = cmd;
             }
         }
 
@@ -194,6 +212,22 @@ namespace LevelCombiner
             }
         }
 
+        class TriangleMapParseState
+        {
+            public VisualMapParseStateCmd state;
+            public TextureDescription td;
+            public UInt64 vertexLoadCmd;
+            public bool isHeader;
+            public Vertex[] vbuf;
+
+            public TriangleMapParseState()
+            {
+                state = VisualMapParseStateCmd.Header;
+                td = new TextureDescription();
+                isHeader = true;
+                vbuf = new Vertex[16];
+            }
+        }
 
 
         public static void PerformRegionParse(ROM rom, List<Region> regions, int offset, int layer)
@@ -393,6 +427,46 @@ namespace LevelCombiner
             realRom.PopOffset();
         }
 
+        public static void PerformTriangleMapRebuild(ROM realRom, Region region, int maxDLLength)
+        {
+            TriangleMapParseState state = new TriangleMapParseState();
+
+            DisplayListRegion dlRegion = (DisplayListRegion)region;
+            TriangleMap map = new TriangleMap();
+
+            realRom.PushOffset(region.romStart);
+            byte curCmdIndex;
+            do
+            {
+                curCmdIndex = realRom.Read8();
+                TriangleMapParserCmd func = triangleMapParser[curCmdIndex];
+                func(realRom, map, state);
+                realRom.AddOffset(8);
+            }
+            while (realRom.offset < region.romStart + region.length);
+            realRom.PopOffset();
+
+            ROM fakeRom = (ROM)realRom.Clone();
+
+            // bzero
+            fakeRom.PushOffset(region.romStart);
+            {
+                do
+                {
+                    fakeRom.Write64(0x0101010101010101);
+                    fakeRom.AddOffset(8);
+                } while (fakeRom.offset < region.romStart + region.length);
+            }
+            fakeRom.PopOffset();
+
+            fakeRom.offset = region.romStart;
+            int triangleMapLength = map.MakeF3D(fakeRom);
+            if (triangleMapLength > maxDLLength)
+                throw new OutOfMemoryException("No memory for DL available :(");
+
+            realRom.TransferFrom(fakeRom);
+        }
+
 
 
         private static void RegionParse_common(ROM rom, List<Region> regions, RegionParseState state) { }
@@ -401,6 +475,21 @@ namespace LevelCombiner
         private static void VisualMapParse_common(ROM rom, VisualMap map, VisualMapParseState state)
         {
             switch(state.state)
+            {
+                case VisualMapParseStateCmd.Header:
+                    map.AddHeaderCmd((UInt64)rom.Read64());
+                    break;
+                case VisualMapParseStateCmd.Texture:
+                    state.td.Add((UInt64)rom.Read64());
+                    break;
+                case VisualMapParseStateCmd.Footer:
+                    map.AddFooterCmd((UInt64)rom.Read64());
+                    break;
+            }
+        }
+        private static void TriangleMapParse_common(ROM rom, TriangleMap map, TriangleMapParseState state)
+        {
+            switch (state.state)
             {
                 case VisualMapParseStateCmd.Header:
                     map.AddHeaderCmd((UInt64)rom.Read64());
@@ -556,6 +645,85 @@ fini:
             }
             VisualMapParse_common(rom, map, state);
         }
+
+
+
+        private static void TriangleMapParse_cmd04(ROM rom, TriangleMap map, TriangleMapParseState state)
+        {
+            state.vertexLoadCmd = (UInt64)rom.Read64();
+            byte vertexDesc = rom.Read8(1);
+
+            byte vertexCount = (byte) (((vertexDesc & 0xF0) >> 4) + 1);
+            byte vertexOffset = (byte)((vertexDesc & 0x0F));
+            Int32 segmentedAddress = rom.Read32(4);
+
+            Int32 romPtr = rom.GetROMAddress(segmentedAddress);
+            if (romPtr == -1)
+                throw new ArgumentException("Invalid segmented address!");
+
+            Int32 romPtrEnd = romPtr + vertexCount * 0x10;
+
+            map.AddVertexRegion(new DynamicRegion(romPtr, romPtrEnd, RegionState.GraphicsData));
+
+            rom.PushOffset(romPtr);
+            for (int vertex = vertexOffset; vertex < vertexCount; vertex++)
+            {
+                Int64 lo = rom.Read64();
+                Int64 hi = rom.Read64(8);
+                state.vbuf[vertex] = new Vertex((UInt64)lo, (UInt64)hi);
+                rom.AddOffset(16);
+            }
+            rom.PopOffset();
+
+
+        }
+        private static void TriangleMapParse_cmdBB(ROM rom, TriangleMap map, TriangleMapParseState state)
+        {
+            if ((UInt64)rom.Read64() == 0xBB000000FFFFFFFF)
+                state.state = VisualMapParseStateCmd.Footer;
+
+            TriangleMapParse_common(rom, map, state);
+        }
+        private static void TriangleMapParse_cmdBF(ROM rom, TriangleMap map, TriangleMapParseState state)
+        {
+            state.isHeader = false;
+            state.state = VisualMapParseStateCmd.Footer;
+
+            byte v0index = (byte) (rom.Read8(5) / 0xA);
+            byte v1index = (byte) (rom.Read8(6) / 0xA);
+            byte v2index = (byte) (rom.Read8(7) / 0xA);
+
+            map.AddTriangle(state.td, state.vbuf[v0index], state.vbuf[v1index], state.vbuf[v2index]);
+        }
+        private static void TriangleMapParse_cmdF2(ROM rom, TriangleMap map, TriangleMapParseState state)
+        {
+            TriangleMapParse_common(rom, map, state);
+            state.state = state.isHeader ? VisualMapParseStateCmd.Header : VisualMapParseStateCmd.Footer; // Case for fog
+        }
+        private static void TriangleMapParse_cmdFB(ROM rom, TriangleMap map, TriangleMapParseState state)
+        {
+            // Some importers have the only EnvColor func for everything lmfao
+            if (rom.Read8(8) != 0xFD)
+                goto fini;
+
+            state.state = VisualMapParseStateCmd.Texture;
+            state.td = new TextureDescription();
+
+        fini:
+            TriangleMapParse_common(rom, map, state);
+        }
+        private static void TriangleMapParse_cmdFD(ROM rom, TriangleMap map, TriangleMapParseState state)
+        {
+            UInt64 fdCmd = state.td.GetTextureCMD();
+            if (state.state != VisualMapParseStateCmd.Texture)
+            {
+                state.state = VisualMapParseStateCmd.Texture;
+                state.td = new TextureDescription();
+            }
+            TriangleMapParse_common(rom, map, state);
+        }
+
+
 
 
         private static void OptimizeParse_cmd04(ROM rom, DisplayListRegion region, RegionOptimizeState state)

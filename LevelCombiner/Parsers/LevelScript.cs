@@ -182,7 +182,8 @@ namespace LevelCombiner
 
                 if (curCmdIndex == 0x17)
                 {
-                    HeaderFix_cmd17(rom, initROM, out bool isFixed);
+                    bool isFixed;
+                    HeaderFix_cmd17(rom, initROM, out isFixed);
                     if (isFixed)
                         break;
                 }
@@ -254,7 +255,7 @@ namespace LevelCombiner
             SegmentDescriptor descriptor = new SegmentDescriptor(startAddress, endAddress - startAddress);
             rom.SetSegment(segment, descriptor);
 
-            rom.levelScriptEntryOffset = rom.offset + 12;
+            //rom.levelScriptEntryOffset = rom.offset + 12;
 
             int segmentedAddress = rom.Read32(12);
             int levelscriptAddress = rom.GetROMAddress(segmentedAddress);

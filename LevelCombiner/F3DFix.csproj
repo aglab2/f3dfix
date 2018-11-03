@@ -45,9 +45,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="DisplayList\TriMap.cs" />
     <Compile Include="DisplayList\VisualMap.cs" />
     <Compile Include="Helper\DisplayListHelper.cs" />
+    <Compile Include="Helper\PositionalBuffer.cs" />
     <Compile Include="ObjectsTrimmer.cs" />
     <Compile Include="Parsers\Collision.cs" />
     <Compile Include="Parsers\DisplayList.cs" />

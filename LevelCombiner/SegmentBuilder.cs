@@ -15,8 +15,8 @@ namespace LevelCombiner
 
         int backedUpOffset;
 
-        public int Offset { get => offset; set => offset = value; }
-        public byte[] Data { get => data; }
+        public int Offset { get { return offset; } set { offset = value; } }
+        public byte[] Data { get { return data; } }
 
         public DataBuilder(int start, int length)
         {

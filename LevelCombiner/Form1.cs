@@ -72,7 +72,7 @@ namespace LevelCombiner
                         if (region.state == RegionState.DisplayList)
                         {
                             DisplayListRegion dlRegion = (DisplayListRegion) region;
-                            object[] row = { dlRegion, true, region.romStart.ToString("X"), i, dlRegion.isFogEnabled, dlRegion.isEnvcolorEnabled, new CombinerCommand(dlRegion.FCcmdfirst), CombinerCommand.GetNewCombiner(dlRegion) };
+                            object[] row = { dlRegion, true, region.romStart.ToString("X"), i, dlRegion.isFogEnabled, dlRegion.isEnvcolorEnabled, new CombinerCommand(dlRegion.FCcmdfirst), CombinerCommand.GetNewCombiner(dlRegion), rom.segments.Clone() };
                             dataGridView1.Rows.Add(row);
                         }
                     }
@@ -87,6 +87,7 @@ namespace LevelCombiner
             GC.Collect();
             foreach(DataGridViewRow row in dataGridView1.Rows)
             {
+                rom.segments = (SegmentDescriptor[]) row.Cells[8].Value;
                 DisplayListRegion dlRegion = (DisplayListRegion) row.Cells[0].Value;
                 Boolean fixingCheckBox = (Boolean)row.Cells[1].Value;
                 DisplayList.FixConfig config = new DisplayList.FixConfig(checkBoxNerfFog.Checked, checkBoxOptimizeVertex.Checked, checkBoxTrimNops.Checked, checkBoxGroupByTexture.Checked, checkBoxCombiners.Checked, checkBoxOtherMode.Checked);
@@ -96,7 +97,7 @@ namespace LevelCombiner
                     if (checkBoxNoFog.Checked)
                         dlRegion.isFogEnabled = false;
 
-                    int maxDLLength = dlRegion.length;
+                    int maxDlLength = dlRegion.length;
                     DisplayList.PerformRegionFix(rom, dlRegion, config);
                     if (checkBoxOptimizeVertex.Checked)
                         DisplayList.PerformRegionOptimize(rom, dlRegion, config);
@@ -104,7 +105,10 @@ namespace LevelCombiner
                     try
                     {
                         if (checkBoxGroupByTexture.Checked)
-                            DisplayList.PerformVisualMapRebuild(rom, dlRegion, maxDLLength);
+                            if (checkBoxRebuildVertices.Checked)
+                                DisplayList.PerformTriangleMapRebuild(rom, dlRegion, maxDlLength);
+                            else
+                                DisplayList.PerformVisualMapRebuild(rom, dlRegion, maxDlLength);
                         DisplayList.PerformRegionOptimize(rom, dlRegion, config);
                     }
                     catch (Exception) { }
@@ -121,7 +125,8 @@ namespace LevelCombiner
         private void button2_Click(object sender, EventArgs e)
         {
             List<Region> regions = new List<Region>();
-            if (!int.TryParse(textBoxF3DPtr.Text, out int offset))
+            int offset;
+            if (!int.TryParse(textBoxF3DPtr.Text, out offset))
             {
                 MessageBox.Show("no", "not at all", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
@@ -146,6 +151,19 @@ namespace LevelCombiner
                 if (checkBoxGroupByTexture.Checked)
                      DisplayList.PerformVisualMapRebuild(rom, dlRegion, maxDLLength);
                 DisplayList.PerformRegionOptimize(rom, dlRegion, config);
+            }
+        }
+
+        private void checkBoxGroupByTexture_CheckedChanged(object sender, EventArgs e)
+        {
+            if (checkBoxGroupByTexture.Checked)
+            {
+                checkBoxRebuildVertices.Enabled = true;
+            }
+            else
+            {
+                checkBoxRebuildVertices.Checked = false;
+                checkBoxRebuildVertices.Enabled = false;
             }
         }
     }

@@ -40,6 +40,7 @@
             this.Alpha = new System.Windows.Forms.DataGridViewCheckBoxColumn();
             this.OldCombiner = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.NewCombiner = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.Segments = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.checkBoxNoFog = new System.Windows.Forms.CheckBox();
             this.checkBoxNerfFog = new System.Windows.Forms.CheckBox();
             this.checkBoxGroupByTexture = new System.Windows.Forms.CheckBox();
@@ -56,6 +57,7 @@
             this.checkBoxOtherMode = new System.Windows.Forms.CheckBox();
             this.toolTip1 = new System.Windows.Forms.ToolTip(this.components);
             this.groupBoxAdvanced = new System.Windows.Forms.GroupBox();
+            this.checkBoxRebuildVertices = new System.Windows.Forms.CheckBox();
             ((System.ComponentModel.ISupportInitialize)(this.dataGridView1)).BeginInit();
             this.groupBoxAdvanced.SuspendLayout();
             this.SuspendLayout();
@@ -91,7 +93,8 @@
             this.fog,
             this.Alpha,
             this.OldCombiner,
-            this.NewCombiner});
+            this.NewCombiner,
+            this.Segments});
             this.dataGridView1.Location = new System.Drawing.Point(12, 12);
             this.dataGridView1.Name = "dataGridView1";
             this.dataGridView1.Size = new System.Drawing.Size(453, 408);
@@ -167,6 +170,12 @@
             this.NewCombiner.Resizable = System.Windows.Forms.DataGridViewTriState.False;
             this.NewCombiner.Width = 85;
             // 
+            // Segments
+            // 
+            this.Segments.HeaderText = "segment";
+            this.Segments.Name = "Segments";
+            this.Segments.Visible = false;
+            // 
             // checkBoxNoFog
             // 
             this.checkBoxNoFog.AutoSize = true;
@@ -197,6 +206,7 @@
             this.checkBoxGroupByTexture.TabIndex = 17;
             this.checkBoxGroupByTexture.Text = "Rebuild sorted by Textures";
             this.checkBoxGroupByTexture.UseVisualStyleBackColor = true;
+            this.checkBoxGroupByTexture.CheckedChanged += new System.EventHandler(this.checkBoxGroupByTexture_CheckedChanged);
             // 
             // label1
             // 
@@ -276,7 +286,7 @@
             // label4
             // 
             this.label4.AutoSize = true;
-            this.label4.Location = new System.Drawing.Point(12, 539);
+            this.label4.Location = new System.Drawing.Point(9, 562);
             this.label4.Name = "label4";
             this.label4.Size = new System.Drawing.Size(72, 13);
             this.label4.TabIndex = 26;
@@ -287,7 +297,7 @@
             this.checkBoxCombiners.AutoSize = true;
             this.checkBoxCombiners.Checked = true;
             this.checkBoxCombiners.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.checkBoxCombiners.Location = new System.Drawing.Point(12, 555);
+            this.checkBoxCombiners.Location = new System.Drawing.Point(9, 578);
             this.checkBoxCombiners.Name = "checkBoxCombiners";
             this.checkBoxCombiners.Size = new System.Drawing.Size(91, 17);
             this.checkBoxCombiners.TabIndex = 27;
@@ -300,7 +310,7 @@
             this.checkBoxOtherMode.AutoSize = true;
             this.checkBoxOtherMode.Checked = true;
             this.checkBoxOtherMode.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.checkBoxOtherMode.Location = new System.Drawing.Point(12, 577);
+            this.checkBoxOtherMode.Location = new System.Drawing.Point(9, 600);
             this.checkBoxOtherMode.Name = "checkBoxOtherMode";
             this.checkBoxOtherMode.Size = new System.Drawing.Size(98, 17);
             this.checkBoxOtherMode.TabIndex = 28;
@@ -322,11 +332,23 @@
             this.groupBoxAdvanced.TabStop = false;
             this.groupBoxAdvanced.Text = "Advanced";
             // 
+            // checkBoxRebuildVertices
+            // 
+            this.checkBoxRebuildVertices.AutoSize = true;
+            this.checkBoxRebuildVertices.Enabled = false;
+            this.checkBoxRebuildVertices.Location = new System.Drawing.Point(12, 542);
+            this.checkBoxRebuildVertices.Name = "checkBoxRebuildVertices";
+            this.checkBoxRebuildVertices.Size = new System.Drawing.Size(103, 17);
+            this.checkBoxRebuildVertices.TabIndex = 30;
+            this.checkBoxRebuildVertices.Text = "Rebuild Vertices";
+            this.checkBoxRebuildVertices.UseVisualStyleBackColor = true;
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(479, 606);
+            this.ClientSize = new System.Drawing.Size(479, 626);
+            this.Controls.Add(this.checkBoxRebuildVertices);
             this.Controls.Add(this.groupBoxAdvanced);
             this.Controls.Add(this.checkBoxOtherMode);
             this.Controls.Add(this.checkBoxCombiners);
@@ -357,14 +379,6 @@
         private System.Windows.Forms.Button splitROM;
         private System.Windows.Forms.Button button1;
         private System.Windows.Forms.DataGridView dataGridView1;
-        private System.Windows.Forms.DataGridViewTextBoxColumn region;
-        private System.Windows.Forms.DataGridViewCheckBoxColumn Fix;
-        private System.Windows.Forms.DataGridViewTextBoxColumn ptr;
-        private System.Windows.Forms.DataGridViewTextBoxColumn Level;
-        private System.Windows.Forms.DataGridViewCheckBoxColumn fog;
-        private System.Windows.Forms.DataGridViewCheckBoxColumn Alpha;
-        private System.Windows.Forms.DataGridViewTextBoxColumn OldCombiner;
-        private System.Windows.Forms.DataGridViewTextBoxColumn NewCombiner;
         private System.Windows.Forms.CheckBox checkBoxNoFog;
         private System.Windows.Forms.CheckBox checkBoxNerfFog;
         private System.Windows.Forms.CheckBox checkBoxGroupByTexture;
@@ -381,6 +395,16 @@
         private System.Windows.Forms.CheckBox checkBoxOtherMode;
         private System.Windows.Forms.ToolTip toolTip1;
         private System.Windows.Forms.GroupBox groupBoxAdvanced;
+        private System.Windows.Forms.DataGridViewTextBoxColumn region;
+        private System.Windows.Forms.DataGridViewCheckBoxColumn Fix;
+        private System.Windows.Forms.DataGridViewTextBoxColumn ptr;
+        private System.Windows.Forms.DataGridViewTextBoxColumn Level;
+        private System.Windows.Forms.DataGridViewCheckBoxColumn fog;
+        private System.Windows.Forms.DataGridViewCheckBoxColumn Alpha;
+        private System.Windows.Forms.DataGridViewTextBoxColumn OldCombiner;
+        private System.Windows.Forms.DataGridViewTextBoxColumn NewCombiner;
+        private System.Windows.Forms.DataGridViewTextBoxColumn Segments;
+        private System.Windows.Forms.CheckBox checkBoxRebuildVertices;
     }
 }
 
