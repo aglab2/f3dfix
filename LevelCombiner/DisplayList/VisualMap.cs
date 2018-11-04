@@ -86,7 +86,7 @@ namespace LevelCombiner
 
     public class VertexBufferDescription
     {
-        int size = 16;
+        int size;
         public Vertex[] vbuf;
         public int freeCount { get; private set; }
         public int usedCount { get => size - freeCount; private set => freeCount = size - value; }
@@ -97,6 +97,7 @@ namespace LevelCombiner
 
         public VertexBufferDescription(UInt32 segmentedAddress, int size)
         {
+            this.size = size;
             this.segmentedAddress = segmentedAddress;
             vbuf = new Vertex[size];
             freeCount = size;
@@ -226,7 +227,7 @@ namespace LevelCombiner
 
         public override string ToString()
         {
-            return (GetHashCode() & 0xFFFF).ToString();
+            return (GetHashCode() & 0xFFFFFF).ToString();
         }
     }
 
@@ -445,8 +446,9 @@ namespace LevelCombiner
                     int vertexStart = region.Key;
                     int vertexLength = region.Value;
 
+                    bool isRegionTrimmed = vertexLength > 0x100;
                     // vertex buffer is 0x100 max size
-                    if (vertexLength > 0x100)
+                    if (isRegionTrimmed)
                     {
                         // Trim and put back data if left
                         vertexBytes.RegionList.Add(vertexStart + 0x100, vertexLength - 0x100);
@@ -475,7 +477,21 @@ namespace LevelCombiner
                         // Right now no vertices are in vbd, pick one with the heighest weight and add it to vbd
                         if (potentialTris.Count == 0)
                         {
-                            var pair = vertex2triMap.Aggregate((prev, cur) => prev.Value.Count > cur.Value.Count ? prev : cur);
+                            // We need at least 3 vertices to draw not present tri
+                            if (vbd.freeCount < 3)
+                                break;
+
+                            KeyValuePair<Vertex, List<Triangle>> pair;
+                            // Let's ask for at least 5 vertices for optimal stuff, otherwise just put the worst triangle and call it
+                            if (vbd.freeCount < 5)
+                            {
+                                pair = vertex2triMap.Aggregate((prev, cur) => prev.Value.Count < cur.Value.Count ? prev : cur);
+                            }
+                            else
+                            {
+                                pair = vertex2triMap.Aggregate((prev, cur) => prev.Value.Count > cur.Value.Count ? prev : cur);
+                            }
+
                             Vertex v = pair.Key;
                             List<Triangle> tris = pair.Value;
                             if (tris.Count == 0)
@@ -541,22 +557,30 @@ namespace LevelCombiner
                         potentialTris.Remove(biggestTri);
 
                         // Setup new triangles to potentialTris
-                        SortedSet<Triangle> newTris = new SortedSet<Triangle>();
+                        HashSet<Triangle> newTris = new HashSet<Triangle>();
                         foreach (Vertex v in biggestTri.vertices)
                         {
                             if (vertex2triMap.TryGetValue(v, out List<Triangle> tris))
-                                newTris.AddRange(tris);
+                                foreach (Triangle tri in tris)
+                                    newTris.Add(tri);
                         }
 
                         // Also do not take into account tris that were added already
                         // If we will take them into account, bad things will happen
-                        newTris.RemoveAll(t => potentialTris.Keys.Contains(t));
+                        newTris.RemoveWhere(t => potentialTris.Keys.Contains(t));
 
                         // As new triangles appear, proceed to fix weights
                         // First of all, initialize world: create new potential tris that will be merged later with potential tris
+                        // Initial value is -vertexPresentBonus as one vertex will be counted anyways
                         Dictionary<Triangle, int> newPotentialTris = new Dictionary<Triangle, int>();
                         foreach (Triangle ntri in newTris)
-                            newPotentialTris[ntri] = 0;
+                            newPotentialTris[ntri] = -vertexPresentBonus;
+
+                        // Calculate weights for vertices that were present
+                        foreach (Triangle ntri in newTris)
+                            foreach (Vertex v in vbd.vbuf)
+                                if (ntri.Contains(v))
+                                    newPotentialTris[ntri] += vertexPresentBonus;
 
                         // Check between triangles new/new
                         var newNewTripairs = newTris.Zip(newTris.Skip(1), (a, b) => Tuple.Create(a, b));
@@ -583,7 +607,7 @@ namespace LevelCombiner
                             newPotentialTris[newTri] += common;
                             potentialTris[oldTri]    += common;
                         }
-
+                    
                         // Merge together old and new
                         foreach (KeyValuePair<Triangle, int> pair in newPotentialTris)
                             potentialTris.Add(pair.Key, pair.Value);
@@ -616,6 +640,14 @@ namespace LevelCombiner
                         if (vbd.freeCount == 1)
                             if (potentialTris.Values.ToList().FindIndex(w => w >= vertexPresentBonus) == -1)
                                 break;
+                    }
+
+                    // If region was trimmed (aka it was not small), bring back unused parts
+                    if (isRegionTrimmed && vbd.freeCount != 0)
+                    {
+                        int size = vbd.freeCount * 0x10;
+                        int offset = vbd.usedCount * 0x10;
+                        vertexBytes.AddRegion(vertexStart + offset, size);
                     }
 
                     rom.PushOffset(vertexStart);

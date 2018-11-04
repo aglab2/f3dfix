@@ -219,6 +219,7 @@ namespace LevelCombiner
             public UInt64 vertexLoadCmd;
             public bool isHeader;
             public Vertex[] vbuf;
+            public Int32[] vbufRomStart;
 
             public TriangleMapParseState()
             {
@@ -226,6 +227,7 @@ namespace LevelCombiner
                 td = new TextureDescription();
                 isHeader = true;
                 vbuf = new Vertex[16];
+                vbufRomStart = new Int32[16];
             }
         }
 
@@ -465,6 +467,11 @@ namespace LevelCombiner
                 throw new OutOfMemoryException("No memory for DL available :(");
 
             realRom.TransferFrom(fakeRom);
+
+            realRom.offset = fakeRom.offset;
+            region.length = realRom.offset - region.romStart;
+            region.data = new byte[region.length];
+            realRom.ReadData(region.romStart, region.length, region.data);
         }
 
 
@@ -663,14 +670,13 @@ fini:
 
             Int32 romPtrEnd = romPtr + vertexCount * 0x10;
 
-            map.AddVertexRegion(new DynamicRegion(romPtr, romPtrEnd, RegionState.GraphicsData));
-
             rom.PushOffset(romPtr);
             for (int vertex = vertexOffset; vertex < vertexCount; vertex++)
             {
                 Int64 lo = rom.Read64();
                 Int64 hi = rom.Read64(8);
                 state.vbuf[vertex] = new Vertex((UInt64)lo, (UInt64)hi);
+                state.vbufRomStart[vertex] = rom.offset;
                 rom.AddOffset(16);
             }
             rom.PopOffset();
@@ -693,6 +699,9 @@ fini:
             byte v1index = (byte) (rom.Read8(6) / 0xA);
             byte v2index = (byte) (rom.Read8(7) / 0xA);
 
+            map.AddVertexRegion(new DynamicRegion(state.vbufRomStart[v0index], 0x10, RegionState.GraphicsData));
+            map.AddVertexRegion(new DynamicRegion(state.vbufRomStart[v1index], 0x10, RegionState.GraphicsData));
+            map.AddVertexRegion(new DynamicRegion(state.vbufRomStart[v2index], 0x10, RegionState.GraphicsData));
             map.AddTriangle(state.td, state.vbuf[v0index], state.vbuf[v1index], state.vbuf[v2index]);
         }
         private static void TriangleMapParse_cmdF2(ROM rom, TriangleMap map, TriangleMapParseState state)
