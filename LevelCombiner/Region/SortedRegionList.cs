@@ -25,8 +25,7 @@ namespace LevelCombiner
             if (length == 0)
                 return;
 
-            int prevLength;
-            regionList.TryGetValue(start, out prevLength);
+            regionList.TryGetValue(start, out int prevLength);
 
             // Key was already there, update value
             if (prevLength != 0)
@@ -79,6 +78,29 @@ namespace LevelCombiner
             regionList.Add(prev.Key, Math.Max(prev.Value, (int) (cur.Value + (cur.Key - prev.Key))));
 
             return true;
+        }
+
+        public void CutContigRegion(int size, int round, out int vertexStart, out int vertexLength, out bool isRegionTrimmed)
+        {
+            // Cut a bit from available space for vertices
+            KeyValuePair<int, int> region = RegionList.First();
+            RegionList.RemoveAt(0);
+            vertexStart = region.Key;
+            vertexLength = region.Value;
+
+            isRegionTrimmed = vertexLength > size;
+            // vertex buffer is size max size
+            if (isRegionTrimmed)
+            {
+                // Trim and put back data if left
+                RegionList.Add(vertexStart + size, vertexLength - size);
+                vertexLength = size;
+            }
+            else
+            {
+                // Round to closest
+                vertexLength = vertexLength / round * round;
+            }    
         }
     }
 }

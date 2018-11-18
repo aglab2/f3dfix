@@ -215,19 +215,25 @@ namespace LevelCombiner
         class TriangleMapParseState
         {
             public VisualMapParseStateCmd state;
-            public TextureDescription td;
+            public ScrollingTextureDescription td;
             public UInt64 vertexLoadCmd;
             public bool isHeader;
             public Vertex[] vbuf;
+            public Scroll[] scrollBuf;
+            public bool[] scrollIsUsedBuf;
             public Int32[] vbufRomStart;
+            public List<Scroll> scrolls;
 
-            public TriangleMapParseState()
+            public TriangleMapParseState(List<Scroll> scrolls)
             {
                 state = VisualMapParseStateCmd.Header;
-                td = new TextureDescription();
+                td = new ScrollingTextureDescription();
                 isHeader = true;
                 vbuf = new Vertex[16];
+                scrollBuf = new Scroll[16];
+                scrollIsUsedBuf = new bool[16];
                 vbufRomStart = new Int32[16];
+                this.scrolls = scrolls;
             }
         }
 
@@ -429,9 +435,9 @@ namespace LevelCombiner
             realRom.PopOffset();
         }
 
-        public static void PerformTriangleMapRebuild(ROM realRom, Region region, int maxDLLength)
+        public static void PerformTriangleMapRebuild(ROM realRom, Region region, int maxDLLength, List<Scroll> scrolls)
         {
-            TriangleMapParseState state = new TriangleMapParseState();
+            TriangleMapParseState state = new TriangleMapParseState(scrolls);
 
             DisplayListRegion dlRegion = (DisplayListRegion)region;
             TriangleMap map = new TriangleMap();
@@ -669,20 +675,25 @@ fini:
                 throw new ArgumentException("Invalid segmented address!");
 
             Int32 romPtrEnd = romPtr + vertexCount * 0x10;
+            segmentedAddress += vertexCount * 0x10;
 
             rom.PushOffset(romPtr);
             for (int vertex = vertexOffset; vertex < vertexCount; vertex++)
             {
                 Int64 lo = rom.Read64();
                 Int64 hi = rom.Read64(8);
+
                 state.vbuf[vertex] = new Vertex((UInt64)lo, (UInt64)hi);
                 state.vbufRomStart[vertex] = rom.offset;
-                rom.AddOffset(16);
+                state.scrollBuf[vertex] = state.scrolls.Find(s => s.SegmentedAddress <= segmentedAddress && segmentedAddress < s.SegmentedAddress + s.VertexCount * 0x10);
+                state.scrollIsUsedBuf[vertex] = false;
+
+                rom.AddOffset(0x10);
+                segmentedAddress += 0x10;
             }
             rom.PopOffset();
-
-
         }
+
         private static void TriangleMapParse_cmdBB(ROM rom, TriangleMap map, TriangleMapParseState state)
         {
             if ((UInt64)rom.Read64() == 0xBB000000FFFFFFFF)
@@ -690,6 +701,7 @@ fini:
 
             TriangleMapParse_common(rom, map, state);
         }
+
         private static void TriangleMapParse_cmdBF(ROM rom, TriangleMap map, TriangleMapParseState state)
         {
             state.isHeader = false;
@@ -702,13 +714,42 @@ fini:
             map.AddVertexRegion(new DynamicRegion(state.vbufRomStart[v0index], 0x10, RegionState.GraphicsData));
             map.AddVertexRegion(new DynamicRegion(state.vbufRomStart[v1index], 0x10, RegionState.GraphicsData));
             map.AddVertexRegion(new DynamicRegion(state.vbufRomStart[v2index], 0x10, RegionState.GraphicsData));
+
+            // This assumes all scrolls are scrolling at the same speed which is usually true :3
+            if (state.scrollBuf[v0index] != state.td.scroll ||
+               (state.scrollBuf[v0index] != null) && (state.td.scroll == null))
+            {
+                ScrollingTextureDescription oldTd = state.td;
+
+                state.td = new ScrollingTextureDescription();
+                state.td.AddRange(oldTd);
+                state.td.scroll = state.scrollBuf[v0index];
+            }
+            else
+            {
+                Console.Write("a");
+            }
+
+            state.scrollIsUsedBuf[v0index] = true;
+            if (state.scrollBuf[v0index] == state.scrollBuf[v1index])
+                state.scrollIsUsedBuf[v1index] = true;
+            else
+                Console.Write("a");
+
+            if (state.scrollBuf[v0index] == state.scrollBuf[v2index])
+                state.scrollIsUsedBuf[v2index] = true;
+            else
+                Console.Write("b");
+
             map.AddTriangle(state.td, state.vbuf[v0index], state.vbuf[v1index], state.vbuf[v2index]);
         }
+
         private static void TriangleMapParse_cmdF2(ROM rom, TriangleMap map, TriangleMapParseState state)
         {
             TriangleMapParse_common(rom, map, state);
             state.state = state.isHeader ? VisualMapParseStateCmd.Header : VisualMapParseStateCmd.Footer; // Case for fog
         }
+
         private static void TriangleMapParse_cmdFB(ROM rom, TriangleMap map, TriangleMapParseState state)
         {
             // Some importers have the only EnvColor func for everything lmfao
@@ -716,18 +757,35 @@ fini:
                 goto fini;
 
             state.state = VisualMapParseStateCmd.Texture;
-            state.td = new TextureDescription();
+            state.td = new ScrollingTextureDescription();
 
         fini:
             TriangleMapParse_common(rom, map, state);
         }
+
         private static void TriangleMapParse_cmdFD(ROM rom, TriangleMap map, TriangleMapParseState state)
         {
             UInt64 fdCmd = state.td.GetTextureCMD();
             if (state.state != VisualMapParseStateCmd.Texture)
             {
+                // Make sure scroll cannot appear on change of scrolling texture
+                for (int i = 0; i < 16; i++)
+                {
+                    if (state.scrollIsUsedBuf[i])
+                    {
+                        Scroll scroll = state.scrollBuf[i];
+                        state.scrolls.Remove(scroll);
+                    }
+                }
+
+                /*for (int i = 0; i < state.scrollBuf.Length; i++)
+                {
+                    state.scrollBuf[i] = null;
+                    state.scrollIsUsedBuf[i] = false;
+                }*/
+
                 state.state = VisualMapParseStateCmd.Texture;
-                state.td = new TextureDescription();
+                state.td = new ScrollingTextureDescription();
             }
             TriangleMapParse_common(rom, map, state);
         }

@@ -63,17 +63,19 @@ namespace LevelCombiner
             public RegionState regionState;
             public Stack<int> retAddressStack;
             public sbyte area;
+            public Dictionary<int, List<Scroll>> scrolls;
 
             public RegionParseState()
             {
                 regionState = RegionState.LevelHeader;
                 retAddressStack = new Stack<int>();
+                scrolls = new Dictionary<int, List<Scroll>>();
             }
         }
 
         const byte terminateCmd = 0x2;
 
-        public static void PerformRegionParse(ROM rom, List<Region> regions, int offset)
+        public static void PerformRegionParse(ROM rom, List<Region> regions, int offset, out Dictionary<int, List<Scroll>> scrolls)
         {
             rom.PushOffset(offset);
 
@@ -101,6 +103,7 @@ namespace LevelCombiner
             while (curCmdIndex != terminateCmd);
 
             rom.PopOffset();
+            scrolls = state.scrolls;
         }
 
         public static void PerformRegionRelocation(Region region, RelocationTable table, sbyte area = -1)
@@ -498,6 +501,16 @@ namespace LevelCombiner
             int behaviour = rom.Read32(0x14);
             if (behaviour == scrollBehaviour || behaviour == scrollBehaviourLegacy)
             {
+                Scroll scroll = new Scroll(rom);
+                if (state.scrolls.TryGetValue(state.area, out List<Scroll> scrolls))
+                {
+                    scrolls.Add(scroll);
+                }
+                else
+                {
+                    state.scrolls[state.area] = new List<Scroll> { scroll };
+                }
+
                 if (state.regionState != RegionState.AreaScrolls)
                 {
                     CutRegion(rom, regions, state, rom.offset, RegionState.AreaScrolls);

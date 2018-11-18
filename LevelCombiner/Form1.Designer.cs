@@ -41,6 +41,7 @@
             this.OldCombiner = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.NewCombiner = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.Segments = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.scrolls = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.checkBoxNoFog = new System.Windows.Forms.CheckBox();
             this.checkBoxNerfFog = new System.Windows.Forms.CheckBox();
             this.checkBoxGroupByTexture = new System.Windows.Forms.CheckBox();
@@ -94,7 +95,8 @@
             this.Alpha,
             this.OldCombiner,
             this.NewCombiner,
-            this.Segments});
+            this.Segments,
+            this.scrolls});
             this.dataGridView1.Location = new System.Drawing.Point(12, 12);
             this.dataGridView1.Name = "dataGridView1";
             this.dataGridView1.Size = new System.Drawing.Size(453, 408);
@@ -175,6 +177,12 @@
             this.Segments.HeaderText = "segment";
             this.Segments.Name = "Segments";
             this.Segments.Visible = false;
+            // 
+            // scrolls
+            // 
+            this.scrolls.HeaderText = "scrolls";
+            this.scrolls.Name = "scrolls";
+            this.scrolls.Visible = false;
             // 
             // checkBoxNoFog
             // 
@@ -365,7 +373,7 @@
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
             this.Name = "Form1";
-            this.Text = "Level Combiner";
+            this.Text = "f3dfix";
             ((System.ComponentModel.ISupportInitialize)(this.dataGridView1)).EndInit();
             this.groupBoxAdvanced.ResumeLayout(false);
             this.groupBoxAdvanced.PerformLayout();
@@ -395,6 +403,7 @@
         private System.Windows.Forms.CheckBox checkBoxOtherMode;
         private System.Windows.Forms.ToolTip toolTip1;
         private System.Windows.Forms.GroupBox groupBoxAdvanced;
+        private System.Windows.Forms.CheckBox checkBoxRebuildVertices;
         private System.Windows.Forms.DataGridViewTextBoxColumn region;
         private System.Windows.Forms.DataGridViewCheckBoxColumn Fix;
         private System.Windows.Forms.DataGridViewTextBoxColumn ptr;
@@ -404,7 +413,7 @@
         private System.Windows.Forms.DataGridViewTextBoxColumn OldCombiner;
         private System.Windows.Forms.DataGridViewTextBoxColumn NewCombiner;
         private System.Windows.Forms.DataGridViewTextBoxColumn Segments;
-        private System.Windows.Forms.CheckBox checkBoxRebuildVertices;
+        private System.Windows.Forms.DataGridViewTextBoxColumn scrolls;
     }
 }
 

@@ -58,7 +58,7 @@ namespace LevelCombiner
                     List<Region> regions = new List<Region>();
 
                     // 1st pass : find out where regions are
-                    LevelScript.PerformRegionParse(rom, regions, offset);
+                    LevelScript.PerformRegionParse(rom, regions, offset, out Dictionary<int, List<Scroll>> scrolls);
 
                     // Fill in data from rom
                     foreach (Region region in regions)
@@ -72,7 +72,11 @@ namespace LevelCombiner
                         if (region.state == RegionState.DisplayList)
                         {
                             DisplayListRegion dlRegion = (DisplayListRegion) region;
-                            object[] row = { dlRegion, true, region.romStart.ToString("X"), i, dlRegion.isFogEnabled, dlRegion.isEnvcolorEnabled, new CombinerCommand(dlRegion.FCcmdfirst), CombinerCommand.GetNewCombiner(dlRegion), rom.segments.Clone() };
+                            scrolls.TryGetValue(1, out List<Scroll> areaScrolls);
+                            if (areaScrolls == null)
+                                areaScrolls = new List<Scroll>();
+
+                            object[] row = { dlRegion, true, region.romStart.ToString("X"), i, dlRegion.isFogEnabled, dlRegion.isEnvcolorEnabled, new CombinerCommand(dlRegion.FCcmdfirst), CombinerCommand.GetNewCombiner(dlRegion), rom.segments.Clone(), areaScrolls };
                             dataGridView1.Rows.Add(row);
                         }
                     }
@@ -88,6 +92,8 @@ namespace LevelCombiner
             foreach(DataGridViewRow row in dataGridView1.Rows)
             {
                 rom.segments = (SegmentDescriptor[]) row.Cells[8].Value;
+                List<Scroll> scrolls = (List<Scroll>) row.Cells[9].Value;
+
                 DisplayListRegion dlRegion = (DisplayListRegion) row.Cells[0].Value;
                 Boolean fixingCheckBox = (Boolean)row.Cells[1].Value;
                 DisplayList.FixConfig config = new DisplayList.FixConfig(checkBoxNerfFog.Checked, checkBoxOptimizeVertex.Checked, checkBoxTrimNops.Checked, checkBoxGroupByTexture.Checked, checkBoxCombiners.Checked, checkBoxOtherMode.Checked);
@@ -106,7 +112,7 @@ namespace LevelCombiner
                     {
                         if (checkBoxGroupByTexture.Checked)
                             if (checkBoxRebuildVertices.Checked)
-                                DisplayList.PerformTriangleMapRebuild(rom, dlRegion, maxDlLength);
+                                DisplayList.PerformTriangleMapRebuild(rom, dlRegion, maxDlLength, scrolls);
                             else
                                 DisplayList.PerformVisualMapRebuild(rom, dlRegion, maxDlLength);
                         DisplayList.PerformRegionOptimize(rom, dlRegion, config);

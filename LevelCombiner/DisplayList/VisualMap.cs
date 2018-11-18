@@ -46,6 +46,55 @@ namespace LevelCombiner
         }
     }
 
+    public class ScrollingTextureDescription : TextureDescription
+    {
+        public Scroll scroll;
+
+        public ScrollingTextureDescription() : base() { }
+
+        public override bool Equals(object obj)
+        {
+            //ScrollingTextureDescription std = (ScrollingTextureDescription) obj;
+            //if (scroll != null && !scroll.Equals(std.scroll))
+            //    return false;
+                
+            return base.Equals(obj);
+        }
+
+        public override int GetHashCode()
+        {
+            int hash = 0;
+            foreach (UInt64 cmd in this)
+            {
+                hash ^= cmd.GetHashCode();
+            }
+            //if (scroll != null)
+            //    hash ^= scroll.GetHashCode();
+
+            return hash;
+        }
+
+        public override string ToString()
+        {
+            string str = "???";
+            foreach (UInt64 cmd in this)
+            {
+                if ((cmd & 0xFF00000000000000) == 0xFD00000000000000)
+                {
+                    str = cmd.ToString();
+                    break;
+                }
+            }
+
+            if (scroll != null)
+            {
+                str += " " + scroll.ToString();
+            }
+
+            return str;
+        }
+    }
+
     public class VerticesDescription
     {
         // 04 cmd -> set of BF cmd
@@ -350,18 +399,42 @@ namespace LevelCombiner
         }
     }
 
+    public class ScrollingTextureDescriptionComp : IComparer<ScrollingTextureDescription>
+    {
+        // Compares by Height, Length, and Width.
+        public int Compare(ScrollingTextureDescription x, ScrollingTextureDescription y)
+        {
+            if (x.scroll == null && y.scroll != null)
+                return 1;
+
+            if (x.scroll != null && y.scroll == null)
+                return -1;
+
+            if (x.scroll == null && y.scroll == null)
+                return x.GetTextureCMD().CompareTo(y.GetTextureCMD());
+
+            int cmp = x.GetTextureCMD().CompareTo(y.GetTextureCMD());
+            if (cmp != 0)
+                return cmp;
+
+            return x.scroll.CompareTo(y.scroll);
+        }
+    }
+
+    // TODO: The way scrolls are implemented is bad: it will not change amount of scrolls used even though it should merge existing ones :(
+    // This will lead to bad separations of data
     public class TriangleMap
     {
         const int vertexPresentBonus = 100000; // should be good enough
 
         List<UInt64> header;
-        Dictionary<TextureDescription, List<Triangle>> map;
+        Dictionary<ScrollingTextureDescription, List<Triangle>> map;
         SortedRegionList vertexBytes;
         List<UInt64> footer;
 
         public TriangleMap()
         {
-            map = new Dictionary<TextureDescription, List<Triangle>>();
+            map = new Dictionary<ScrollingTextureDescription, List<Triangle>>();
             vertexBytes = new SortedRegionList();
             header = new List<UInt64>();
             footer = new List<UInt64>();
@@ -382,7 +455,7 @@ namespace LevelCombiner
             vertexBytes.AddRegion(region.romStart, region.length);
         }
 
-        public void AddTriangle(TextureDescription td, Vertex v0, Vertex v1, Vertex v2)
+        public void AddTriangle(ScrollingTextureDescription td, Vertex v0, Vertex v1, Vertex v2)
         {
             if (!map.TryGetValue(td, out List<Triangle> set))
             {
@@ -403,10 +476,11 @@ namespace LevelCombiner
                 rom.AddOffset(8);
             }
 
-            List<TextureDescription> tds = map.Keys.ToList();
-            tds.Sort(new TextureDescriptionComp());
+            // TODO: This is kinda stupid assumption but we believe there are more triangles in the beginning available...
+            List<ScrollingTextureDescription> tds = map.Keys.ToList();
+            tds.Sort(new ScrollingTextureDescriptionComp());
 
-            foreach (TextureDescription td in tds)
+            foreach (ScrollingTextureDescription td in tds)
             {
                 foreach (UInt64 cmd in td)
                 {
@@ -436,29 +510,15 @@ namespace LevelCombiner
                     }
                 }
 
+                // FIXME: This assumes all scrolling data will be contiguous which might not be true...
+                int romVertexAddress = vertexBytes.RegionList.First().Key;
+                int writtenVerticesCount = 0;
+
                 // Check if there are still vertices that needs to be worked with
                 // Also we must make sure all lists in v2tm are not empty!
                 while (vertex2triMap.Count != 0)
                 {
-                    // Cut a bit from available space for vertices
-                    KeyValuePair<int, int> region = vertexBytes.RegionList.First();
-                    vertexBytes.RegionList.RemoveAt(0);
-                    int vertexStart = region.Key;
-                    int vertexLength = region.Value;
-
-                    bool isRegionTrimmed = vertexLength > 0x100;
-                    // vertex buffer is 0x100 max size
-                    if (isRegionTrimmed)
-                    {
-                        // Trim and put back data if left
-                        vertexBytes.RegionList.Add(vertexStart + 0x100, vertexLength - 0x100);
-                        vertexLength = 0x100;
-                    }
-                    else
-                    {
-                        // Round to closest 0x10
-                        vertexLength = vertexLength / 0x10 * 0x10;
-                    }
+                    vertexBytes.CutContigRegion(0x100, 0x10, out int vertexStart, out int vertexLength, out bool isRegionTrimmed);
 
                     int segmentedVertexStart = rom.GetSegmentedAddress(vertexStart);
 
@@ -652,9 +712,28 @@ namespace LevelCombiner
 
                     rom.PushOffset(vertexStart);
                     vbd.MakeData(rom);
+                    writtenVerticesCount += (rom.offset - vertexStart) / 0x10;
                     rom.PopOffset();
 
                     vbd.MakeF3D(rom);
+                }
+
+                if (td.scroll != null)
+                {
+                    // Vertices must be rounded by 3 because skelux scrolls work like that
+                    if (writtenVerticesCount % 3 != 0)
+                    {
+                        int leftToRoundVertices = 3 - (writtenVerticesCount % 3);
+                        writtenVerticesCount += leftToRoundVertices;
+                        vertexBytes.CutContigRegion(0x10 * leftToRoundVertices, 0x10, out _, out _, out _);
+                    }
+
+                    Scroll outScroll = (Scroll)td.scroll.Clone();
+                    // Fix scroll and write it back in rom
+                    int segmentedAddress = rom.GetSegmentedAddress(romVertexAddress);
+                    outScroll.SegmentedAddress = segmentedAddress;
+                    outScroll.VertexCount = writtenVerticesCount;
+                    outScroll.WriteScroll(rom);
                 }
             }
             foreach (UInt64 cmd in footer)

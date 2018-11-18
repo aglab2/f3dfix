@@ -77,7 +77,7 @@ namespace LevelCombiner
                     return 0xFC121824FF33FFFF;
 
                 if (alpha)
-                    return 0xFC122E24FFFFFBFD;
+                    return 0xFC127E24FFFFFBFD;
             }
             else
             {
@@ -113,30 +113,13 @@ namespace LevelCombiner
         {
             CombinerCommand oldCmd = new CombinerCommand(dlRegion.FCcmdfirst);
 
-            if (dlRegion.isEnvcolorEnabled && dlRegion.isFogEnabled)
-                return new CombinerCommand(fog: true, alpha: true);
+            if (dlRegion.isEnvcolorEnabled)
+                return new CombinerCommand(fog: dlRegion.isFogEnabled, alpha: true);
 
-            if (dlRegion.isEnvcolorEnabled && !dlRegion.isFogEnabled)
-                return new CombinerCommand(alpha: true);
+            if (oldCmd.opaque)
+                return new CombinerCommand(fog: dlRegion.isFogEnabled, opaque: true);
 
-            if (dlRegion.isFogEnabled)
-            {
-                if (oldCmd.solid)
-                    return new CombinerCommand(fog: true, solid: true);
-
-                if (oldCmd.opaque)
-                    return new CombinerCommand(fog: true, opaque: true);
-            }
-            else
-            {
-                if (oldCmd.solid)
-                    return new CombinerCommand(solid: true);
-
-                if (oldCmd.opaque)
-                    return new CombinerCommand(opaque: true);
-            }
-
-            return oldCmd;
+            return new CombinerCommand(fog: dlRegion.isFogEnabled, solid: true);
         }
     }
 
