@@ -193,7 +193,6 @@
             this.checkBoxNoFog.TabIndex = 14;
             this.checkBoxNoFog.Text = "Disable Fog (Wii)";
             this.checkBoxNoFog.UseVisualStyleBackColor = true;
-            this.checkBoxNoFog.Visible = false;
             // 
             // checkBoxNerfFog
             // 

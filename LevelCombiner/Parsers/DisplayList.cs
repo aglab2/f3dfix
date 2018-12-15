@@ -114,8 +114,9 @@ namespace LevelCombiner
             public bool groupByTextures;
             public bool fixCombiners;
             public bool fixOtherMode;
+            public bool disableFog;
 
-            public FixConfig(bool nerfFog, bool optimizeVertex, bool trimNOPs, bool groupByTextures, bool fixCombiners, bool fixOtherMode)
+            public FixConfig(bool nerfFog, bool optimizeVertex, bool trimNOPs, bool groupByTextures, bool fixCombiners, bool fixOtherMode, bool disableFog)
             {
                 this.nerfFog = nerfFog;
                 this.optimize = optimizeVertex;
@@ -123,6 +124,7 @@ namespace LevelCombiner
                 this.groupByTextures = groupByTextures;
                 this.fixCombiners = fixCombiners;
                 this.fixOtherMode = fixOtherMode;
+                this.disableFog = disableFog;
             }
         }
 
@@ -648,6 +650,7 @@ namespace LevelCombiner
 fini:
             VisualMapParse_common(rom, map, state);
         }
+
         private static void VisualMapParse_cmdFD(ROM rom, VisualMap map, VisualMapParseState state)
         {
             UInt64 fdCmd = state.td.GetTextureCMD();
@@ -944,9 +947,27 @@ fini:
             }
         }
 
+        private static void FixParse_cmdB6(ROM rom, DisplayListRegion region, RegionFixState state)
+        {
+            if (state.config.disableFog)
+                rom.Write64(0);
+        }
+
+
+        private static void FixParse_cmdB7(ROM rom, DisplayListRegion region, RegionFixState state)
+        {
+            if (state.config.disableFog)
+                    rom.Write64(0);
+        }
 
         private static void FixParse_cmdB9(ROM rom, DisplayListRegion region, RegionFixState state)
         {
+            if (state.config.disableFog)
+            {
+                rom.Write64(0);
+                return;
+            }
+
             if (!state.config.fixOtherMode)
                 return;
 
@@ -962,8 +983,22 @@ fini:
             if (B9Cmd != 0)
                 rom.Write64(B9Cmd);
         }
+
+
+        private static void FixParse_cmdBA(ROM rom, DisplayListRegion region, RegionFixState state)
+        {
+            if (state.config.disableFog)
+                rom.Write64(0);
+        }
+
         private static void FixParse_cmdBC(ROM rom, DisplayListRegion region, RegionFixState state)
         {
+            if (state.config.disableFog)
+            {
+                rom.Write64(0);
+                return;
+            }
+
             if (state.config.nerfFog)
             {
                 float A = rom.Read16(4);
@@ -984,6 +1019,13 @@ fini:
                 rom.Write16(Bint, 6);
             }
         }
+        
+        private static void FixParse_cmdF8(ROM rom, DisplayListRegion region, RegionFixState state)
+        {
+            if (state.config.disableFog)
+                rom.Write64(0);
+        }
+
         private static void FixParse_cmdFC(ROM rom, DisplayListRegion region, RegionFixState state)
         {
             if (!state.config.fixCombiners)

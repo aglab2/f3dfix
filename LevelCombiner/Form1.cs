@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -96,7 +97,7 @@ namespace LevelCombiner
 
                 DisplayListRegion dlRegion = (DisplayListRegion) row.Cells[0].Value;
                 Boolean fixingCheckBox = (Boolean)row.Cells[1].Value;
-                DisplayList.FixConfig config = new DisplayList.FixConfig(checkBoxNerfFog.Checked, checkBoxOptimizeVertex.Checked, checkBoxTrimNops.Checked, checkBoxGroupByTexture.Checked, checkBoxCombiners.Checked, checkBoxOtherMode.Checked);
+                DisplayList.FixConfig config = new DisplayList.FixConfig(checkBoxNerfFog.Checked, checkBoxOptimizeVertex.Checked, checkBoxTrimNops.Checked, checkBoxGroupByTexture.Checked, checkBoxCombiners.Checked, checkBoxOtherMode.Checked, checkBoxNoFog.Checked);
 
                 if (fixingCheckBox)
                 {
@@ -132,12 +133,12 @@ namespace LevelCombiner
         {
             List<Region> regions = new List<Region>();
             int offset;
-            if (!int.TryParse(textBoxF3DPtr.Text, out offset))
+            if (!Int32.TryParse(textBoxF3DPtr.Text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out offset))
             {
                 MessageBox.Show("no", "not at all", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
-            DisplayList.FixConfig config = new DisplayList.FixConfig(checkBoxNerfFog.Checked, checkBoxOptimizeVertex.Checked, checkBoxTrimNops.Checked, checkBoxGroupByTexture.Checked, checkBoxCombiners.Checked, checkBoxOtherMode.Checked);
+            DisplayList.FixConfig config = new DisplayList.FixConfig(checkBoxNerfFog.Checked, checkBoxOptimizeVertex.Checked, checkBoxTrimNops.Checked, checkBoxGroupByTexture.Checked, checkBoxCombiners.Checked, checkBoxOtherMode.Checked, checkBoxNoFog.Checked);
 
             DisplayList.PerformRegionParse(rom, regions, offset, int.Parse(textBoxLayer.Text));
             foreach (Region region in regions)
@@ -158,6 +159,9 @@ namespace LevelCombiner
                      DisplayList.PerformVisualMapRebuild(rom, dlRegion, maxDLLength);
                 DisplayList.PerformRegionOptimize(rom, dlRegion, config);
             }
+
+            File.WriteAllBytes(path, rom.rom);
+            MessageBox.Show(String.Format("Ptr was fixed successfully"), "f3d fix", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void checkBoxGroupByTexture_CheckedChanged(object sender, EventArgs e)
