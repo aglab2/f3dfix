@@ -90,7 +90,11 @@ namespace LevelCombiner
         private void button1_Click(object sender, EventArgs e)
         {
             GC.Collect();
-            foreach(DataGridViewRow row in dataGridView1.Rows)
+            rom.PushOffset(0xD48B7);
+            rom.Write8(0x5C);
+            Checksum.CalculateChecksum(rom);
+            rom.PopOffset();
+            foreach (DataGridViewRow row in dataGridView1.Rows)
             {
                 rom.segments = (SegmentDescriptor[]) row.Cells[8].Value;
                 List<Scroll> scrolls = (List<Scroll>) row.Cells[9].Value;

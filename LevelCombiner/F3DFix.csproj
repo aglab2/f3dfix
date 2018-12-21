@@ -46,6 +46,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="DisplayList\VisualMap.cs" />
+    <Compile Include="Helper\Checksum.cs" />
     <Compile Include="Helper\DisplayListHelper.cs" />
     <Compile Include="Helper\PositionalBuffer.cs" />
     <Compile Include="Helper\Scrolls.cs" />
