@@ -179,6 +179,10 @@ namespace LevelCombiner
             public Int64 lastF8Cmd;
             public FixConfig config;
 
+            public int prevF2cmdAddr;
+            public int prevF5cmdAddr;
+            public int prevFDcmdAddr;
+
             public RegionOptimizeState(FixConfig config)
             {
                 last04Cmd = 0;
@@ -189,6 +193,10 @@ namespace LevelCombiner
                 lastBCCmd = 0;
                 lastF8Cmd = 0;
                 this.config = config;
+
+                prevF2cmdAddr = 0;
+                prevF5cmdAddr = 0;
+                prevFDcmdAddr = 0;
             }
         }
 
@@ -884,6 +892,7 @@ fini:
                 return;
             }
         }
+    
         private static void OptimizeParse_cmdB7(ROM rom, DisplayListRegion region, RegionOptimizeState state)
         {
             // Very failsafe approach
@@ -929,6 +938,7 @@ fini:
                 return;
             }
         }
+
         private static void OptimizeParse_cmdBC(ROM rom, DisplayListRegion region, RegionOptimizeState state)
         {
             Int64 cmd = rom.Read64();
@@ -945,6 +955,49 @@ fini:
                 rom.Write64(0);
                 return;
             }
+        }
+
+        private static void OptimizeParse_cmdBF(ROM rom, DisplayListRegion region, RegionOptimizeState state)
+        {
+            state.prevF2cmdAddr = 0;
+            state.prevF5cmdAddr = 0;
+            state.prevFDcmdAddr = 0;
+        }
+
+        private static void OptimizeParse_cmdF2(ROM rom, DisplayListRegion region, RegionOptimizeState state)
+        {
+            if (state.prevF2cmdAddr != 0)
+            {
+                rom.PushOffset(state.prevF2cmdAddr);
+                rom.Write64(0);
+                rom.PopOffset();
+            }
+
+            state.prevF2cmdAddr = rom.offset;
+        }
+
+        private static void OptimizeParse_cmdF5(ROM rom, DisplayListRegion region, RegionOptimizeState state)
+        {
+            if (state.prevF5cmdAddr != 0)
+            {
+                rom.PushOffset(state.prevF5cmdAddr);
+                rom.Write64(0);
+                rom.PopOffset();
+            }
+
+            state.prevF5cmdAddr = rom.offset;
+        }
+
+        private static void OptimizeParse_cmdFD(ROM rom, DisplayListRegion region, RegionOptimizeState state)
+        {
+            if (state.prevFDcmdAddr != 0)
+            {
+                rom.PushOffset(state.prevFDcmdAddr);
+                rom.Write64(0);
+                rom.PopOffset();
+            }
+
+            state.prevFDcmdAddr = rom.offset;
         }
 
         private static void FixParse_cmdB6(ROM rom, DisplayListRegion region, RegionFixState state)

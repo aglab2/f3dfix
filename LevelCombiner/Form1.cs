@@ -123,8 +123,6 @@ namespace LevelCombiner
                         DisplayList.PerformRegionOptimize(rom, dlRegion, config);
                     }
                     catch (Exception) { }
-
-
                 }
             }
 
@@ -136,12 +134,23 @@ namespace LevelCombiner
         private void button2_Click(object sender, EventArgs e)
         {
             List<Region> regions = new List<Region>();
-            int offset;
-            if (!Int32.TryParse(textBoxF3DPtr.Text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out offset))
+            if (!Int32.TryParse(textBoxF3DPtr.Text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int offset))
             {
-                MessageBox.Show("no", "not at all", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Custom DL", "Invalid ptr", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
+            if (!Int32.TryParse(textBoxSegNum.Text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int segment))
+            {
+                MessageBox.Show("Custom DL", "Invalid segment", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+            if (!Int32.TryParse(textBoxROMAddr.Text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int addr))
+            {
+                MessageBox.Show("Custom DL", "Invalid rom addr", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+            
+            rom.SetSegment(segment, new SegmentDescriptor(addr, 0x00400000));
             DisplayList.FixConfig config = new DisplayList.FixConfig(checkBoxNerfFog.Checked, checkBoxOptimizeVertex.Checked, checkBoxTrimNops.Checked, checkBoxGroupByTexture.Checked, checkBoxCombiners.Checked, checkBoxOtherMode.Checked, checkBoxNoFog.Checked);
 
             DisplayList.PerformRegionParse(rom, regions, offset, int.Parse(textBoxLayer.Text));
@@ -158,13 +167,19 @@ namespace LevelCombiner
                 DisplayList.PerformRegionFix(rom, dlRegion, config);
                 if (checkBoxOptimizeVertex.Checked)
                     DisplayList.PerformRegionOptimize(rom, dlRegion, config);
-               
+
                 if (checkBoxGroupByTexture.Checked)
-                     DisplayList.PerformVisualMapRebuild(rom, dlRegion, maxDLLength);
+                    if (checkBoxRebuildVertices.Checked)
+                        DisplayList.PerformTriangleMapRebuild(rom, dlRegion, maxDLLength, new List<Scroll>());
+                    else
+                        DisplayList.PerformVisualMapRebuild(rom, dlRegion, maxDLLength);
+            
                 DisplayList.PerformRegionOptimize(rom, dlRegion, config);
             }
 
             File.WriteAllBytes(path, rom.rom);
+
+            rom.SetSegment(segment, null);
             MessageBox.Show(String.Format("Ptr was fixed successfully"), "f3d fix", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 

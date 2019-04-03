@@ -58,6 +58,10 @@
             this.checkBoxOtherMode = new System.Windows.Forms.CheckBox();
             this.toolTip1 = new System.Windows.Forms.ToolTip(this.components);
             this.groupBoxAdvanced = new System.Windows.Forms.GroupBox();
+            this.label6 = new System.Windows.Forms.Label();
+            this.textBoxROMAddr = new System.Windows.Forms.TextBox();
+            this.textBoxSegNum = new System.Windows.Forms.TextBox();
+            this.label5 = new System.Windows.Forms.Label();
             this.checkBoxRebuildVertices = new System.Windows.Forms.CheckBox();
             ((System.ComponentModel.ISupportInitialize)(this.dataGridView1)).BeginInit();
             this.groupBoxAdvanced.SuspendLayout();
@@ -250,14 +254,14 @@
             // 
             // textBoxF3DPtr
             // 
-            this.textBoxF3DPtr.Location = new System.Drawing.Point(45, 23);
+            this.textBoxF3DPtr.Location = new System.Drawing.Point(82, 23);
             this.textBoxF3DPtr.Name = "textBoxF3DPtr";
             this.textBoxF3DPtr.Size = new System.Drawing.Size(100, 20);
             this.textBoxF3DPtr.TabIndex = 21;
             // 
             // button2
             // 
-            this.button2.Location = new System.Drawing.Point(151, 21);
+            this.button2.Location = new System.Drawing.Point(188, 21);
             this.button2.Name = "button2";
             this.button2.Size = new System.Drawing.Size(75, 23);
             this.button2.TabIndex = 22;
@@ -267,7 +271,7 @@
             // 
             // textBoxLayer
             // 
-            this.textBoxLayer.Location = new System.Drawing.Point(45, 47);
+            this.textBoxLayer.Location = new System.Drawing.Point(82, 47);
             this.textBoxLayer.Name = "textBoxLayer";
             this.textBoxLayer.Size = new System.Drawing.Size(100, 20);
             this.textBoxLayer.TabIndex = 23;
@@ -277,18 +281,18 @@
             this.label2.AutoSize = true;
             this.label2.Location = new System.Drawing.Point(6, 26);
             this.label2.Name = "label2";
-            this.label2.Size = new System.Drawing.Size(20, 13);
+            this.label2.Size = new System.Drawing.Size(65, 13);
             this.label2.TabIndex = 24;
-            this.label2.Text = "Ptr";
+            this.label2.Text = "DL ROM Ptr";
             // 
             // label3
             // 
             this.label3.AutoSize = true;
             this.label3.Location = new System.Drawing.Point(6, 50);
             this.label3.Name = "label3";
-            this.label3.Size = new System.Drawing.Size(33, 13);
+            this.label3.Size = new System.Drawing.Size(50, 13);
             this.label3.TabIndex = 25;
-            this.label3.Text = "Layer";
+            this.label3.Text = "DL Layer";
             // 
             // label4
             // 
@@ -327,17 +331,53 @@
             // 
             // groupBoxAdvanced
             // 
+            this.groupBoxAdvanced.Controls.Add(this.label6);
+            this.groupBoxAdvanced.Controls.Add(this.textBoxROMAddr);
+            this.groupBoxAdvanced.Controls.Add(this.textBoxSegNum);
+            this.groupBoxAdvanced.Controls.Add(this.label5);
             this.groupBoxAdvanced.Controls.Add(this.textBoxF3DPtr);
             this.groupBoxAdvanced.Controls.Add(this.textBoxLayer);
             this.groupBoxAdvanced.Controls.Add(this.label2);
             this.groupBoxAdvanced.Controls.Add(this.label3);
             this.groupBoxAdvanced.Controls.Add(this.button2);
-            this.groupBoxAdvanced.Location = new System.Drawing.Point(217, 473);
+            this.groupBoxAdvanced.Location = new System.Drawing.Point(193, 473);
             this.groupBoxAdvanced.Name = "groupBoxAdvanced";
-            this.groupBoxAdvanced.Size = new System.Drawing.Size(234, 79);
+            this.groupBoxAdvanced.Size = new System.Drawing.Size(274, 141);
             this.groupBoxAdvanced.TabIndex = 29;
             this.groupBoxAdvanced.TabStop = false;
             this.groupBoxAdvanced.Text = "Advanced";
+            // 
+            // label6
+            // 
+            this.label6.AutoSize = true;
+            this.label6.Location = new System.Drawing.Point(6, 89);
+            this.label6.Name = "label6";
+            this.label6.Size = new System.Drawing.Size(70, 13);
+            this.label6.TabIndex = 29;
+            this.label6.Text = "Seg ROM Ptr";
+            // 
+            // textBoxROMAddr
+            // 
+            this.textBoxROMAddr.Location = new System.Drawing.Point(82, 86);
+            this.textBoxROMAddr.Name = "textBoxROMAddr";
+            this.textBoxROMAddr.Size = new System.Drawing.Size(100, 20);
+            this.textBoxROMAddr.TabIndex = 28;
+            // 
+            // textBoxSegNum
+            // 
+            this.textBoxSegNum.Location = new System.Drawing.Point(82, 112);
+            this.textBoxSegNum.Name = "textBoxSegNum";
+            this.textBoxSegNum.Size = new System.Drawing.Size(100, 20);
+            this.textBoxSegNum.TabIndex = 27;
+            // 
+            // label5
+            // 
+            this.label5.AutoSize = true;
+            this.label5.Location = new System.Drawing.Point(7, 115);
+            this.label5.Name = "label5";
+            this.label5.Size = new System.Drawing.Size(66, 13);
+            this.label5.TabIndex = 26;
+            this.label5.Text = "Seg Number";
             // 
             // checkBoxRebuildVertices
             // 
@@ -413,6 +453,10 @@
         private System.Windows.Forms.DataGridViewTextBoxColumn NewCombiner;
         private System.Windows.Forms.DataGridViewTextBoxColumn Segments;
         private System.Windows.Forms.DataGridViewTextBoxColumn scrolls;
+        private System.Windows.Forms.Label label6;
+        private System.Windows.Forms.TextBox textBoxROMAddr;
+        private System.Windows.Forms.TextBox textBoxSegNum;
+        private System.Windows.Forms.Label label5;
     }
 }
 
