@@ -111,17 +111,15 @@ namespace LevelCombiner
             public bool nerfFog;
             public bool optimize;
             public bool trimNOPs;
-            public bool groupByTextures;
             public bool fixCombiners;
             public bool fixOtherMode;
             public bool disableFog;
 
-            public FixConfig(bool nerfFog, bool optimizeVertex, bool trimNOPs, bool groupByTextures, bool fixCombiners, bool fixOtherMode, bool disableFog)
+            public FixConfig(bool nerfFog, bool optimizeVertex, bool trimNOPs, bool fixCombiners, bool fixOtherMode, bool disableFog)
             {
                 this.nerfFog = nerfFog;
                 this.optimize = optimizeVertex;
                 this.trimNOPs = trimNOPs;
-                this.groupByTextures = groupByTextures;
                 this.fixCombiners = fixCombiners;
                 this.fixOtherMode = fixOtherMode;
                 this.disableFog = disableFog;
@@ -177,10 +175,10 @@ namespace LevelCombiner
             public Int64 lastBACmd;
             public Int64 lastBCCmd;
             public Int64 lastF8Cmd;
+            public Int64 lastFBCmd;
             public FixConfig config;
 
             public int prevF2cmdAddr;
-            public int prevF5cmdAddr;
             public int prevFDcmdAddr;
 
             public RegionOptimizeState(FixConfig config)
@@ -192,10 +190,10 @@ namespace LevelCombiner
                 lastBACmd = 0;
                 lastBCCmd = 0;
                 lastF8Cmd = 0;
+                lastFBCmd = 0;
                 this.config = config;
 
                 prevF2cmdAddr = 0;
-                prevF5cmdAddr = 0;
                 prevFDcmdAddr = 0;
             }
         }
@@ -212,12 +210,14 @@ namespace LevelCombiner
             public VisualMapParseStateCmd state;
             public TextureDescription td;
             public UInt64 vertexLoadCmd;
+            public UInt64? envColorCmd;
             public bool isHeader;
 
             public VisualMapParseState()
             {
                 state = VisualMapParseStateCmd.Header;
                 td = new TextureDescription();
+                envColorCmd = null;
                 isHeader = true;
             }
         }
@@ -228,22 +228,25 @@ namespace LevelCombiner
             public ScrollingTextureDescription td;
             public UInt64 vertexLoadCmd;
             public bool isHeader;
+            public int segmentedVertexBufferAddress;
             public Vertex[] vbuf;
             public Scroll[] scrollBuf;
-            public bool[] scrollIsUsedBuf;
             public Int32[] vbufRomStart;
-            public List<Scroll> scrolls;
+            public List<ScrollObject> scrolls;
+            public UInt64? envColorCmd;
+            public SortedRegionList vertexBytes;
 
-            public TriangleMapParseState(List<Scroll> scrolls)
+            public TriangleMapParseState(List<ScrollObject> scrolls)
             {
                 state = VisualMapParseStateCmd.Header;
                 td = new ScrollingTextureDescription();
                 isHeader = true;
+                segmentedVertexBufferAddress = -1;
                 vbuf = new Vertex[16];
                 scrollBuf = new Scroll[16];
-                scrollIsUsedBuf = new bool[16];
                 vbufRomStart = new Int32[16];
                 this.scrolls = scrolls;
+                vertexBytes = new SortedRegionList();
             }
         }
 
@@ -445,10 +448,127 @@ namespace LevelCombiner
             realRom.PopOffset();
         }
 
-        public static void PerformTriangleMapRebuild(ROM realRom, Region region, int maxDLLength, List<Scroll> scrolls)
+        public static void GetTriangleMap(ROM realRom, Region region, int maxDLLength, List<ScrollObject> scrolls, out TriangleMap map, out SortedRegionList vertexData)
         {
             TriangleMapParseState state = new TriangleMapParseState(scrolls);
+            DisplayListRegion dlRegion = (DisplayListRegion)region;
+            map = new TriangleMap();
 
+            realRom.PushOffset(region.romStart);
+            byte curCmdIndex;
+            do
+            {
+                curCmdIndex = realRom.Read8();
+                TriangleMapParserCmd func = triangleMapParser[curCmdIndex];
+                func(realRom, map, state);
+                realRom.AddOffset(8);
+            }
+            while (realRom.offset < region.romStart + region.length);
+            realRom.PopOffset();
+
+            // Check map validity
+            // There are 2 possible ways to mess up scroll
+            // 'Too much' - scroll is performing too much scrolling, 1st warn detect, 2nd falsing, 3rd can fix such scroll if scrolls are done properly
+            // 'Not enough' - scroll is not scrolling the whole texture, 2nd warn may be able to detect that, no fix yet but 'stretch' the scroll should work
+
+            // I assume there is no scrolls that do not correspond to no texture, such case will leave weird things :)
+
+            // Currently ScrollingTextures cannot be longed so it is impossible to fix 'Not enough' :(
+            List<ScrollingTextureDescription> brokenTextures = new List<ScrollingTextureDescription>();
+            {
+                // Not enough
+                HashSet<TextureDescription> scrollingTds = new HashSet<TextureDescription>(map.map.Keys.Where(k => k.scroll != null));
+                foreach (TextureDescription td in scrollingTds)
+                {
+                    var stds = map.map.Keys.Where(k => k.Equals(td)).ToList();
+                    if (stds.Count() > 1)
+                    {
+                        int a = 0;
+                    }
+                }
+
+                // Check if scroll 'fits'
+                foreach (ScrollingTextureDescription std in map.map.Keys)
+                {
+                    if (std.scroll == null)
+                        continue;
+
+                    if (!std.vertexRegions.Equals(std.scrollRegions))
+                    {
+                        brokenTextures.Add(std);
+                    }
+                }
+            }
+
+            foreach (ScrollingTextureDescription brokenTd in brokenTextures)
+            {
+                // Figure out the way to "heal", either drop scroll or extend it
+                // If scroll does not start at the same  place, just drop it, such solution may backfire if 2 scrolls intersect
+                bool shouldDrop = brokenTd.scrollRegions.RegionList.First().Key != brokenTd.vertexRegions.RegionList.First().Key;
+
+                if (shouldDrop)
+                {
+                    // Find if texture without scroll exists, if it does, merge tris in it, otherwise drop the scroll
+                    List<ScrollingTextureDescription> similarTextures = map.map.Keys.Where(k => k.scroll == null).Where(k => TextureDescription.Equals(brokenTd, k)).ToList();
+                    if (similarTextures.Count() != 0)
+                    {
+                        ScrollingTextureDescription stdNoScroll = similarTextures[0];
+                        List<Triangle> tris = map.map[brokenTd];
+                        map.map.Remove(brokenTd);
+                        map.map[stdNoScroll].AddRange(tris);
+                    }
+                    else
+                    {
+                        state.td.scroll = null;
+                    }
+                }
+                else
+                {
+                    // Find if texture without scroll exists, if it does, merge tris from it (make it scroll)
+                    List<ScrollingTextureDescription> similarTextures = map.map.Keys.Where(k => k.scroll == null).Where(k => TextureDescription.Equals(brokenTd, k)).ToList();
+                    foreach (ScrollingTextureDescription similarStd in similarTextures)
+                    {
+                        List<Triangle> tris = map.map[similarStd];
+                        map.map.Remove(similarStd);
+                        map.map[brokenTd].AddRange(tris);
+                    }
+                }
+            }
+
+            vertexData = state.vertexBytes;
+        }
+
+        public static void RebuildTriangleMap(ROM realRom, Region region, int maxDLLength, TriangleMap map, SortedRegionList vertexData, ScrollFactory factory)
+        {
+            ROM fakeRom = (ROM)realRom.Clone();
+
+            // bzero
+            fakeRom.PushOffset(region.romStart);
+            {
+                do
+                {
+                    fakeRom.Write64(0x0101010101010101);
+                    fakeRom.AddOffset(8);
+                } while (fakeRom.offset < region.romStart + region.length);
+            }
+            fakeRom.PopOffset();
+
+            fakeRom.offset = region.romStart;
+            int triangleMapLength = map.MakeF3D(fakeRom, vertexData, factory);
+            if (triangleMapLength > maxDLLength)
+                throw new OutOfMemoryException("No memory for DL available :(");
+
+            realRom.TransferFrom(fakeRom);
+
+            realRom.offset = fakeRom.offset;
+            region.length = realRom.offset - region.romStart;
+            region.data = new byte[region.length];
+            realRom.ReadData(region.romStart, region.length, region.data);
+        }
+
+        public static void PerformTriangleMapRebuild(ROM realRom, Region region, int maxDLLength, List<ScrollObject> scrolls)
+        {
+            TriangleMapParseState state = new TriangleMapParseState(scrolls);
             DisplayListRegion dlRegion = (DisplayListRegion)region;
             TriangleMap map = new TriangleMap();
 
@@ -478,7 +598,7 @@ namespace LevelCombiner
             fakeRom.PopOffset();
 
             fakeRom.offset = region.romStart;
-            int triangleMapLength = map.MakeF3D(fakeRom);
+            int triangleMapLength = map.MakeF3D(fakeRom, state.vertexBytes, new ScrollFactory(scrolls));
             if (triangleMapLength > maxDLLength)
                 throw new OutOfMemoryException("No memory for DL available :(");
 
@@ -652,6 +772,7 @@ namespace LevelCombiner
             if (rom.Read8(8) != 0xFD)
                 goto fini;
 
+            state.envColorCmd = (ulong) rom.Read64();
             state.state = VisualMapParseStateCmd.Texture;
             state.td = new TextureDescription();
 
@@ -666,6 +787,8 @@ fini:
             {
                 state.state = VisualMapParseStateCmd.Texture;
                 state.td = new TextureDescription();
+                if (state.envColorCmd != null)
+                    state.td.Add(state.envColorCmd.GetValueOrDefault());
             }
             VisualMapParse_common(rom, map, state);
         }
@@ -680,13 +803,15 @@ fini:
             byte vertexCount = (byte) (((vertexDesc & 0xF0) >> 4) + 1);
             byte vertexOffset = (byte)((vertexDesc & 0x0F));
             Int32 segmentedAddress = rom.Read32(4);
+            state.segmentedVertexBufferAddress = segmentedAddress;
 
             Int32 romPtr = rom.GetROMAddress(segmentedAddress);
             if (romPtr == -1)
                 throw new ArgumentException("Invalid segmented address!");
 
-            Int32 romPtrEnd = romPtr + vertexCount * 0x10;
-            segmentedAddress += vertexCount * 0x10;
+            // This is incorrect?
+            //Int32 romPtrEnd = romPtr + vertexCount * 0x10;
+            //segmentedAddress += vertexCount * 0x10;
 
             rom.PushOffset(romPtr);
             for (int vertex = vertexOffset; vertex < vertexCount; vertex++)
@@ -696,9 +821,8 @@ fini:
 
                 state.vbuf[vertex] = new Vertex((UInt64)lo, (UInt64)hi);
                 state.vbufRomStart[vertex] = rom.offset;
-                state.scrollBuf[vertex] = state.scrolls.Find(s => s.SegmentedAddress <= segmentedAddress && segmentedAddress < s.SegmentedAddress + s.VertexCount * 0x10);
-                state.scrollIsUsedBuf[vertex] = false;
-
+                state.scrollBuf[vertex] = state.scrolls.Find(s => s.segmentedAddress <= segmentedAddress && segmentedAddress < s.segmentedAddress + s.vertexCount * 0x10);
+                
                 rom.AddOffset(0x10);
                 segmentedAddress += 0x10;
             }
@@ -722,36 +846,32 @@ fini:
             byte v1index = (byte) (rom.Read8(6) / 0xA);
             byte v2index = (byte) (rom.Read8(7) / 0xA);
 
-            map.AddVertexRegion(new DynamicRegion(state.vbufRomStart[v0index], 0x10, RegionState.GraphicsData));
-            map.AddVertexRegion(new DynamicRegion(state.vbufRomStart[v1index], 0x10, RegionState.GraphicsData));
-            map.AddVertexRegion(new DynamicRegion(state.vbufRomStart[v2index], 0x10, RegionState.GraphicsData));
+            state.vertexBytes.AddRegion(state.vbufRomStart[v0index], 0x10);
+            state.vertexBytes.AddRegion(state.vbufRomStart[v1index], 0x10);
+            state.vertexBytes.AddRegion(state.vbufRomStart[v2index], 0x10);
 
             // This assumes all scrolls are scrolling at the same speed which is usually true :3
-            if (state.scrollBuf[v0index] != state.td.scroll ||
-               (state.scrollBuf[v0index] != null) && (state.td.scroll == null))
+            if (state.scrollBuf[v0index] != state.scrollBuf[v1index]
+             || state.scrollBuf[v0index] != state.scrollBuf[v2index]
+             || state.scrollBuf[v1index] != state.scrollBuf[v2index])
+                throw new Exception("Vertices are scrolling at different scrolls");
+
+            Scroll scroll = state.scrollBuf[v0index];
+
+            if ((scroll == null && state.td.scroll != null)
+             || (scroll != null && !scroll.Equals(state.td.scroll)))
             {
                 ScrollingTextureDescription oldTd = state.td;
 
                 state.td = new ScrollingTextureDescription();
                 state.td.AddRange(oldTd);
-                state.td.scroll = state.scrollBuf[v0index];
-            }
-            else
-            {
-                Console.Write("a");
+                state.td.scroll = scroll; 
+                state.td.RegisterScroll(scroll);
             }
 
-            state.scrollIsUsedBuf[v0index] = true;
-            if (state.scrollBuf[v0index] == state.scrollBuf[v1index])
-                state.scrollIsUsedBuf[v1index] = true;
-            else
-                Console.Write("a");
-
-            if (state.scrollBuf[v0index] == state.scrollBuf[v2index])
-                state.scrollIsUsedBuf[v2index] = true;
-            else
-                Console.Write("b");
-
+            state.td.RegisterVertex(state.segmentedVertexBufferAddress + v0index * 0x10);
+            state.td.RegisterVertex(state.segmentedVertexBufferAddress + v1index * 0x10);
+            state.td.RegisterVertex(state.segmentedVertexBufferAddress + v2index * 0x10);
             map.AddTriangle(state.td, state.vbuf[v0index], state.vbuf[v1index], state.vbuf[v2index]);
         }
 
@@ -768,6 +888,7 @@ fini:
                 goto fini;
 
             state.state = VisualMapParseStateCmd.Texture;
+            state.envColorCmd = (ulong)rom.Read64();
             state.td = new ScrollingTextureDescription();
 
         fini:
@@ -779,24 +900,12 @@ fini:
             UInt64 fdCmd = state.td.GetTextureCMD();
             if (state.state != VisualMapParseStateCmd.Texture)
             {
-                // Make sure scroll cannot appear on change of scrolling texture
-                for (int i = 0; i < 16; i++)
-                {
-                    if (state.scrollIsUsedBuf[i])
-                    {
-                        Scroll scroll = state.scrollBuf[i];
-                        state.scrolls.Remove(scroll);
-                    }
-                }
-
-                /*for (int i = 0; i < state.scrollBuf.Length; i++)
-                {
-                    state.scrollBuf[i] = null;
-                    state.scrollIsUsedBuf[i] = false;
-                }*/
-
                 state.state = VisualMapParseStateCmd.Texture;
                 state.td = new ScrollingTextureDescription();
+                if (state.envColorCmd != null)
+                {
+                    state.td.Add(state.envColorCmd.GetValueOrDefault());
+                }
             }
             TriangleMapParse_common(rom, map, state);
         }
@@ -960,7 +1069,6 @@ fini:
         private static void OptimizeParse_cmdBF(ROM rom, DisplayListRegion region, RegionOptimizeState state)
         {
             state.prevF2cmdAddr = 0;
-            state.prevF5cmdAddr = 0;
             state.prevFDcmdAddr = 0;
         }
 
@@ -976,16 +1084,20 @@ fini:
             state.prevF2cmdAddr = rom.offset;
         }
 
-        private static void OptimizeParse_cmdF5(ROM rom, DisplayListRegion region, RegionOptimizeState state)
+        private static void OptimizeParse_cmdFB(ROM rom, DisplayListRegion region, RegionOptimizeState state)
         {
-            if (state.prevF5cmdAddr != 0)
+            Int64 cmd = rom.Read64();
+            if (state.lastFBCmd == 0)
             {
-                rom.PushOffset(state.prevF5cmdAddr);
-                rom.Write64(0);
-                rom.PopOffset();
+                state.lastFBCmd = cmd;
+                return;
             }
 
-            state.prevF5cmdAddr = rom.offset;
+            if (cmd == state.lastFBCmd)
+            {
+                rom.Write64(0);
+                return;
+            }
         }
 
         private static void OptimizeParse_cmdFD(ROM rom, DisplayListRegion region, RegionOptimizeState state)

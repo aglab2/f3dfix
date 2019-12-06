@@ -6,18 +6,25 @@ using System.Text;
 namespace LevelCombiner
 {
     // List of F3D commands basically
-    public class TextureDescription : List<UInt64>
+    public class TextureDescription
     {
+        protected List<UInt64> cmds = new List<UInt64>();
+
         public override bool Equals(object obj)
         {
-            List<UInt64> list = (List<UInt64>)(obj);
-            return Enumerable.SequenceEqual(this, list);
+            TextureDescription list = (TextureDescription)(obj);
+            return Enumerable.SequenceEqual(cmds, list.cmds);
+        }
+
+        static public bool Equals(TextureDescription td1, TextureDescription td2)
+        {
+            return Enumerable.SequenceEqual(td1.cmds, td2.cmds);
         }
 
         public override int GetHashCode()
         {
             int hash = 0;
-            foreach (UInt64 cmd in this)
+            foreach (UInt64 cmd in cmds)
             {
                 hash ^= cmd.GetHashCode();
             }
@@ -26,7 +33,7 @@ namespace LevelCombiner
 
         public UInt64 GetTextureCMD()
         {
-            foreach (UInt64 cmd in this)
+            foreach (UInt64 cmd in cmds)
             {
                 if ((cmd & 0xFF00000000000000) == 0xFD00000000000000)
                     return cmd;
@@ -36,27 +43,43 @@ namespace LevelCombiner
 
         public override string ToString()
         {
-            foreach (UInt64 cmd in this)
+            foreach (UInt64 cmd in cmds)
             {
-                if ((cmd & 0xFF000000) == 0xFD000000)
-                    return cmd.ToString();
+                if ((cmd & 0xFF00000000000000) == 0xfd00000000000000)
+                    return cmd.ToString("X8");
             }
 
             return base.ToString();
         }
+
+        public void Add(UInt64 cmd)
+        {
+            cmds.Add(cmd);
+        }
+
+        public void AddRange(List<UInt64> otherCmds)
+        {
+            cmds.AddRange(otherCmds);
+        }
+
+        public static implicit operator List<UInt64>(TextureDescription td) => td.cmds;
     }
 
     public class ScrollingTextureDescription : TextureDescription
     {
-        public Scroll scroll;
+        public ScrollDesc scroll;
 
-        public ScrollingTextureDescription() : base() { }
+        public ScrollingTextureDescription() : base() 
+        {
+            scrollRegions = new SortedRegionList();
+            vertexRegions = new SortedRegionList();
+        }
 
         public override bool Equals(object obj)
         {
-            //ScrollingTextureDescription std = (ScrollingTextureDescription) obj;
-            //if (scroll != null && !scroll.Equals(std.scroll))
-            //    return false;
+            ScrollingTextureDescription std = (ScrollingTextureDescription) obj;
+            if (scroll != null && !scroll.Equals(std.scroll))
+                return false;
                 
             return base.Equals(obj);
         }
@@ -64,12 +87,12 @@ namespace LevelCombiner
         public override int GetHashCode()
         {
             int hash = 0;
-            foreach (UInt64 cmd in this)
+            foreach (UInt64 cmd in cmds)
             {
                 hash ^= cmd.GetHashCode();
             }
-            //if (scroll != null)
-            //    hash ^= scroll.GetHashCode();
+            if (scroll != null)
+                hash ^= scroll.GetHashCode();
 
             return hash;
         }
@@ -77,11 +100,11 @@ namespace LevelCombiner
         public override string ToString()
         {
             string str = "???";
-            foreach (UInt64 cmd in this)
+            foreach (UInt64 cmd in cmds)
             {
                 if ((cmd & 0xFF00000000000000) == 0xFD00000000000000)
                 {
-                    str = cmd.ToString();
+                    str = cmd.ToString("X8");
                     break;
                 }
             }
@@ -92,6 +115,21 @@ namespace LevelCombiner
             }
 
             return str;
+        }
+
+        public SortedRegionList scrollRegions;
+        public void RegisterScroll(Scroll scr)
+        {
+            if (scr == null)
+                return;
+
+            scrollRegions.AddRegion(scr.segmentedAddress, scr.vertexCount * 0x10);
+        }
+
+        public SortedRegionList vertexRegions;
+        public void RegisterVertex(int segAddr)
+        {
+            vertexRegions.AddRegion(segAddr, 0x10);
         }
     }
 
@@ -372,7 +410,7 @@ namespace LevelCombiner
 
             foreach (TextureDescription td in tds)
             {
-                foreach (UInt64 cmd in td)
+                foreach (UInt64 cmd in (List<UInt64>)td)
                 {
                     rom.Write64(cmd);
                     rom.AddOffset(8);
@@ -404,21 +442,64 @@ namespace LevelCombiner
         // Compares by Height, Length, and Width.
         public int Compare(ScrollingTextureDescription x, ScrollingTextureDescription y)
         {
+            int cmp = x.GetTextureCMD().CompareTo(y.GetTextureCMD());
+            if (cmp != 0)
+                return cmp;
+
+            if (x.scroll == null && y.scroll == null)
+                return 0;
+
             if (x.scroll == null && y.scroll != null)
                 return 1;
 
             if (x.scroll != null && y.scroll == null)
                 return -1;
 
-            if (x.scroll == null && y.scroll == null)
-                return x.GetTextureCMD().CompareTo(y.GetTextureCMD());
-
-            int cmp = x.GetTextureCMD().CompareTo(y.GetTextureCMD());
-            if (cmp != 0)
-                return cmp;
-
-            return x.scroll.CompareTo(y.scroll);
+            return 0; //x.scroll.CompareTo(y.scroll);
         }
+    }
+
+    public class ScrollFactory
+    {
+        public ScrollFactory(List<ScrollObject> scrollers)
+        {
+            editorScrollBehaviour = 0x402300;
+            this.scrollers = scrollers;
+        }
+
+        public List<EditorScroll> GetScrolls(int vertexCount, int segmentedAddress, byte speed, byte acts, TextureAxis axis)
+        {
+            List<EditorScroll> scrolls = new List<EditorScroll>();
+            /*
+            while (vertexCount != 0)
+            {
+                ScrollObject scr = Fetch();
+                if (vertexCount > 0xff * 3)
+                {
+                    vertexCount -= 0xff * 3;
+                    scrolls.Add(new EditorScroll(0xff * 3, segmentedAddress, speed, acts, axis, editorScrollBehaviour, scr.romOffset));
+                }
+                else
+                {
+                    scrolls.Add(new EditorScroll(vertexCount, segmentedAddress, speed, acts, axis, editorScrollBehaviour, scr.romOffset));
+                    vertexCount = 0;
+                }
+            }
+            */
+            ScrollObject scr = Fetch();
+            scrolls.Add(new EditorScroll(vertexCount, segmentedAddress, speed, acts, axis, editorScrollBehaviour, scr.romOffset));
+            return scrolls;
+        }
+
+        ScrollObject Fetch()
+        {
+            ScrollObject scr = scrollers[0];
+            scrollers.Remove(scr);
+            return scr;
+        }
+
+        int editorScrollBehaviour;
+        List<ScrollObject> scrollers;
     }
 
     // TODO: The way scrolls are implemented is bad: it will not change amount of scrolls used even though it should merge existing ones :(
@@ -428,14 +509,12 @@ namespace LevelCombiner
         const int vertexPresentBonus = 100000; // should be good enough
 
         List<UInt64> header;
-        Dictionary<ScrollingTextureDescription, List<Triangle>> map;
-        SortedRegionList vertexBytes;
         List<UInt64> footer;
+        public Dictionary<ScrollingTextureDescription, List<Triangle>> map;
 
         public TriangleMap()
         {
             map = new Dictionary<ScrollingTextureDescription, List<Triangle>>();
-            vertexBytes = new SortedRegionList();
             header = new List<UInt64>();
             footer = new List<UInt64>();
         }
@@ -450,11 +529,6 @@ namespace LevelCombiner
             footer.Add(cmd);
         }
 
-        public void AddVertexRegion(Region region)
-        {
-            vertexBytes.AddRegion(region.romStart, region.length);
-        }
-
         public void AddTriangle(ScrollingTextureDescription td, Vertex v0, Vertex v1, Vertex v2)
         {
             if (!map.TryGetValue(td, out List<Triangle> set))
@@ -467,7 +541,7 @@ namespace LevelCombiner
             set.Add(tri);
         }
 
-        public int MakeF3D(ROM rom)
+        public int MakeF3D(ROM rom, SortedRegionList vertexBytes, ScrollFactory factory)
         {
             int start = rom.offset;
             foreach (UInt64 cmd in header)
@@ -480,13 +554,17 @@ namespace LevelCombiner
             List<ScrollingTextureDescription> tds = map.Keys.ToList();
             tds.Sort(new ScrollingTextureDescriptionComp());
 
+            TextureDescription prevTd = null;
             foreach (ScrollingTextureDescription td in tds)
             {
-                foreach (UInt64 cmd in td)
-                {
-                    rom.Write64(cmd);
-                    rom.AddOffset(8);
-                }
+                if (prevTd != td)
+                    foreach (UInt64 cmd in (List<UInt64>)td)
+                    {
+                        rom.Write64(cmd);
+                        rom.AddOffset(8);
+                    }
+
+                prevTd = td;
 
                 // Time to do optimization magic
                 List<Triangle> textureTris = map[td];
@@ -502,28 +580,26 @@ namespace LevelCombiner
                         {
                             vertex2triMap[v] = new List<Triangle>();
                         }
-                        else
-                        {
-                            Console.Write("ok");
-                        }
                         vertex2triMap[v].Add(tri);
                     }
                 }
 
-                // FIXME: This assumes all scrolling data will be contiguous which might not be true...
-                int romVertexAddress = vertexBytes.RegionList.First().Key;
+                // You quite literally can't eat more than that
+                int vertexLength = 0x30 * textureTris.Count();
+                vertexBytes.CutContigRegion(vertexLength, out int vertexPosition);
+
+                int allocVertexStart = vertexPosition;
+                int allocVertexEnd = allocVertexStart + vertexLength;
                 int writtenVerticesCount = 0;
 
                 // Check if there are still vertices that needs to be worked with
                 // Also we must make sure all lists in v2tm are not empty!
                 while (vertex2triMap.Count != 0)
                 {
-                    vertexBytes.CutContigRegion(0x100, 0x10, out int vertexStart, out int vertexLength, out bool isRegionTrimmed);
-
-                    int segmentedVertexStart = rom.GetSegmentedAddress(vertexStart);
+                    int segmentedVertexStart = rom.GetSegmentedAddress(vertexPosition);
 
                     // vbd is main structure that holds information about used vertices space
-                    VertexBufferDescription vbd = new VertexBufferDescription((UInt32) segmentedVertexStart, vertexLength / 0x10);
+                    VertexBufferDescription vbd = new VertexBufferDescription((UInt32) segmentedVertexStart, 0xF);
 
                     // Potential triangles also have weight depending on connection to other triangles and to added vertices
                     // Weight +1 for each tri that shares vertice; +vertexPresentBonus for each vbd present vertex
@@ -702,17 +778,10 @@ namespace LevelCombiner
                                 break;
                     }
 
-                    // If region was trimmed (aka it was not small), bring back unused parts
-                    if (isRegionTrimmed && vbd.freeCount != 0)
-                    {
-                        int size = vbd.freeCount * 0x10;
-                        int offset = vbd.usedCount * 0x10;
-                        vertexBytes.AddRegion(vertexStart + offset, size);
-                    }
-
-                    rom.PushOffset(vertexStart);
+                    rom.PushOffset(vertexPosition);
                     vbd.MakeData(rom);
-                    writtenVerticesCount += (rom.offset - vertexStart) / 0x10;
+                    writtenVerticesCount += (rom.offset - vertexPosition) / 0x10;
+                    vertexPosition = rom.offset;
                     rom.PopOffset();
 
                     vbd.MakeF3D(rom);
@@ -725,16 +794,17 @@ namespace LevelCombiner
                     {
                         int leftToRoundVertices = 3 - (writtenVerticesCount % 3);
                         writtenVerticesCount += leftToRoundVertices;
-                        vertexBytes.CutContigRegion(0x10 * leftToRoundVertices, 0x10, out _, out _, out _);
                     }
 
-                    Scroll outScroll = (Scroll)td.scroll.Clone();
-                    // Fix scroll and write it back in rom
-                    int segmentedAddress = rom.GetSegmentedAddress(romVertexAddress);
-                    outScroll.SegmentedAddress = segmentedAddress;
-                    outScroll.VertexCount = writtenVerticesCount;
-                    outScroll.WriteScroll(rom);
+                    int segmentedAddress = rom.GetSegmentedAddress(allocVertexStart);
+                    List<EditorScroll> scrolls = factory.GetScrolls(writtenVerticesCount, segmentedAddress, td.scroll.speed, td.scroll.acts, td.scroll.axis);
+                    foreach(EditorScroll scroll in scrolls)
+                    {
+                        scroll.WriteScroll(rom);
+                    }
                 }
+
+                vertexBytes.AddRegion(vertexPosition, allocVertexEnd - vertexPosition);
             }
             foreach (UInt64 cmd in footer)
             {

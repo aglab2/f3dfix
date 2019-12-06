@@ -63,19 +63,19 @@ namespace LevelCombiner
             public RegionState regionState;
             public Stack<int> retAddressStack;
             public sbyte area;
-            public Dictionary<int, List<Scroll>> scrolls;
+            public Dictionary<int, List<ScrollObject>> scrolls;
 
             public RegionParseState()
             {
                 regionState = RegionState.LevelHeader;
                 retAddressStack = new Stack<int>();
-                scrolls = new Dictionary<int, List<Scroll>>();
+                scrolls = new Dictionary<int, List<ScrollObject>>();
             }
         }
 
         const byte terminateCmd = 0x2;
 
-        public static void PerformRegionParse(ROM rom, List<Region> regions, int offset, out Dictionary<int, List<Scroll>> scrolls)
+        public static void PerformRegionParse(ROM rom, List<Region> regions, int offset, out Dictionary<int, List<ScrollObject>> scrolls)
         {
             rom.PushOffset(offset);
 
@@ -501,28 +501,29 @@ namespace LevelCombiner
             int behaviour = rom.Read32(0x14);
             if (behaviour == scrollBehaviour || behaviour == scrollBehaviourLegacy)
             {
-                Scroll scroll = new Scroll(rom);
-                if (state.scrolls.TryGetValue(state.area, out List<Scroll> scrolls))
+                EditorScroll scroll = new EditorScroll(rom);
+                if (scroll.acts != 0)
                 {
-                    scrolls.Add(scroll);
-                }
-                else
-                {
-                    state.scrolls[state.area] = new List<Scroll> { scroll };
-                }
+                    if (state.scrolls.TryGetValue(state.area, out List<ScrollObject> scrolls))
+                    {
+                        scrolls.Add(scroll);
+                    }
+                    else
+                    {
+                        state.scrolls[state.area] = new List<ScrollObject> { scroll };
+                    }
 
-                if (state.regionState != RegionState.AreaScrolls)
-                {
-                    CutRegion(rom, regions, state, rom.offset, RegionState.AreaScrolls);
-                }
-            }
-            else
-            {
-                if (state.regionState != RegionState.AreaData)
-                {
-                    CutRegion(rom, regions, state, rom.offset, RegionState.AreaData);
+                    if (state.regionState != RegionState.AreaScrolls)
+                    {
+                        CutRegion(rom, regions, state, rom.offset, RegionState.AreaScrolls);
+                    }
                     return;
                 }
+            }
+
+            if (state.regionState != RegionState.AreaData)
+            {
+                CutRegion(rom, regions, state, rom.offset, RegionState.AreaData);
             }
         }
 

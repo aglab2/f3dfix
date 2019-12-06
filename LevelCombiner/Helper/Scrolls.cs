@@ -5,132 +5,227 @@ using System.Text;
 
 namespace LevelCombiner
 {
-    public class Scroll : IEquatable<Scroll>, IComparable<Scroll>, ICloneable
+    public class EditorScroll : ScrollObject
     {
-        public int SegmentedAddress
+        public EditorScroll(ROM rom) : base(rom)
+        {
+            segmentedAddress = 0x0e000000;
+            acts = rom.Read8(0x02);
+            X = rom.Read16(0x04);
+            Y = rom.Read16(0x06);
+            Z = rom.Read16(0x08);
+            BParam = rom.Read16(0x10);
+            BParam2 = rom.Read16(0x12);
+        }
+
+        public EditorScroll(int vertexCount, int segmentedAddress, byte speed, byte acts, TextureAxis axis, int behav, int offset) : base(vertexCount, segmentedAddress, speed, acts, axis, offset, behav)
+        { }
+
+        public short X
         {
             get
             {
-                int address = 0;
-
-                byte hiddenX = GetHiddenFloatByte(X);
-
-                address += hiddenX * 0x10000;
-                address += bparam;
-
-                return address - 0x20000 + 0x0E000000 - axisOffset;
+                byte xval = (byte) (((segmentedAddress >> 16) & 0xff) + 2);
+                return MakeHiddenFloat(xval);
             }
             set
             {
-                int newAddress = value - 0x0E000000 + 0x20000 + axisOffset;
-
-                X = SetHiddenFloatByte(X, (byte)((newAddress >> 16) & 0xFF));
-                bparam = (ushort)(newAddress & 0xFFFF);
+                byte xval = (byte) (GetHiddenFloatByte(value) - 2);
+                segmentedAddress = (int) ((segmentedAddress & 0xff00ffff) + (xval << 16));
             }
         }
 
-        public int VertexCount
+        public short Y
         {
             get
             {
-                return GetHiddenFloatByte(Y) * 3;
+                return 0; // MakeHiddenFloat((byte) (vertexCount / 3));
             }
             set
             {
-                Y = SetHiddenFloatByte(Y, (byte) (value / 3));
+                if (value != 0)
+                    vertexCount = GetHiddenFloatByte(value) * 3;
             }
         }
 
-        public override string ToString()
+        public short BParam2
         {
-            return SegmentedAddress.ToString() + " " + VertexCount.ToString();
+            get
+            {
+                return (short) vertexCount;
+            }
+            set
+            {
+                if (value != 0)
+                    vertexCount = value;
+            }
         }
 
-        public override int GetHashCode()
+        public short Z
         {
-            return X ^ Y ^ Z ^ bparam ^ acts ^ romOffset;
+            get
+            {
+                return MakeHiddenFloat(speed);
+            }
+            set
+            {
+                speed = GetHiddenFloatByte(value);
+            }
         }
 
-        public bool Equals(Scroll other)
+        public short BParam
         {
-            if (other == null)
-                return false;
+            get
+            {
+                int axisOffset = 0;
+                switch (axis)
+                {
+                    case TextureAxis.X:
+                        axisOffset = 0x8;
+                        break;
+                    case TextureAxis.Y:
+                        axisOffset = 0xA;
+                        break;
+                }
 
-            return romOffset == other.romOffset && X == other.X && Y == other.Y && Z == other.Z && bparam == other.bparam && acts == other.acts;
+                return (short) ((segmentedAddress & 0xffff) + axisOffset);
+            }
+            set
+            {
+                int vertexOffset = value & 0xfff0;
+                int axisOffset = value & 0xf;
+
+                if (axisOffset == 0x8)
+                {
+                    axis = TextureAxis.X;
+                }
+                else if (axisOffset == 0xa)
+                {
+                    axis = TextureAxis.Y;
+                }
+                else
+                {
+                    throw new Exception("Editor scroll axis offset is wrong!\n");
+                }
+
+                segmentedAddress = (int)(segmentedAddress & 0xffff0000) + vertexOffset;
+            }
         }
 
-        public int CompareTo(Scroll other)
-        {
-            return romOffset.CompareTo(other.romOffset);
-        }
 
-        private ushort bparam;
-        private int behaviour;
-        private int X, Y, Z;
-        private byte acts;
-        private int romOffset;
-        private int axisOffset; // this is purely magic
-
-        byte GetHiddenFloatByte(int A)
+        byte GetHiddenFloatByte(short A)
         {
             float floatA = A;
             byte[] data = BitConverter.GetBytes(floatA);
             return data[2];
         }
 
-        int SetHiddenFloatByte(int A, byte v)
+        short MakeHiddenFloat(byte val)
         {
-            float floatA = A;
-            byte[] data = BitConverter.GetBytes(floatA);
-            data[2] = v;
-            float newFloatA = BitConverter.ToSingle(data, 0);
-            return Convert.ToInt16(newFloatA);
+            byte[] data = new byte[4];
+            data[2] = val;
+            data[3] = 0x46;
+            float fl = BitConverter.ToSingle(data, 0);
+            return Convert.ToInt16(fl);
+        }
+
+        public override string ToString()
+        {
+            return segmentedAddress.ToString("X8") + " " + vertexCount.ToString();
+        }
+
+        public override void WriteScroll(ROM rom)
+        {
+            rom.PushOffset(romOffset);
+            rom.Write8(acts, 0x02);
+            rom.Write16(X, 0x04);
+            rom.Write16(Y, 0x06);
+            rom.Write16(Z, 0x08);
+            rom.Write16(BParam, 0x10);
+            rom.Write16(BParam2, 0x12);
+            rom.Write32(behavior, 0x14);
+            rom.PopOffset();
+        }
+    }
+
+    public class TextureScroll : Scroll
+    {
+
+    }
+
+    public abstract class ScrollObject : Scroll
+    {
+        public int romOffset;
+        public int behavior;
+
+        public ScrollObject(ROM rom)
+        {
+            romOffset = rom.offset;
+            behavior = rom.Read32(0x14);
+        }
+
+        public ScrollObject(int vertexCount, int segmentedAddress, byte speed, byte acts, TextureAxis axis, int romOffset, int behavior) : base(vertexCount, segmentedAddress, speed, acts, axis)
+        {
+            this.romOffset = romOffset;
+            this.behavior = behavior;
+        }
+
+        public abstract void WriteScroll(ROM rom);
+
+        public void Disable(ROM rom)
+        {
+            rom.PushOffset(romOffset);
+            rom.Write8(0, 0x02);
+            rom.PopOffset();
+        }
+    }
+
+    public enum TextureAxis
+    {
+        X,
+        Y,
+    };
+
+    public class Scroll : ScrollDesc
+    {
+        public int vertexCount;
+        public int segmentedAddress;
+
+        public Scroll(int vertexCount, int segmentedAddress, byte speed, byte acts, TextureAxis axis) : base(speed, acts, axis)
+        {
+            this.vertexCount = vertexCount;
+            this.segmentedAddress = segmentedAddress;
         }
 
         public Scroll() { }
+    }
 
-        public Scroll(ROM rom)
+    public class ScrollDesc : IEquatable<ScrollDesc>
+    {
+        public byte speed;
+        public byte acts;
+        public TextureAxis axis;
+
+        public ScrollDesc(byte speed, byte acts, TextureAxis axis) 
         {
-            acts      = rom.Read8 (0x02);
-            X         = rom.Read16(0x04);
-            Y         = rom.Read16(0x06);
-            Z         = rom.Read16(0x08);
-            bparam    = (ushort) rom.Read16(0x10);
-            behaviour = rom.Read32(0x14);
-            romOffset = rom.offset;
-
-            // To get axis affset, get the lower bits of SegmentedAddress
-            // On next calls, SegmentedAddress with have axisOffset removed
-            axisOffset = 0;
-            axisOffset = SegmentedAddress & 0xF;
+            this.speed = speed;
+            this.acts = acts;
+            this.axis = axis;
         }
 
-        public void WriteScroll(ROM rom)
+        public ScrollDesc() { }
+
+        public override int GetHashCode()
         {
-            rom.PushOffset(romOffset);
-            rom.Write8(acts,       0x02);
-            rom.Write16(X,         0x04);
-            rom.Write16(Y,         0x06);
-            rom.Write16(Z,         0x08);
-            rom.Write16(bparam,    0x10);
-            rom.Write32(behaviour, 0x14);
-            rom.PopOffset();
+            return speed ^ acts ^ (int)axis;
         }
 
-        public object Clone()
+        public bool Equals(ScrollDesc other)
         {
-            Scroll obj = new Scroll
-            {
-                X = X,
-                Y = Y,
-                Z = Z,
-                romOffset = romOffset,
-                bparam = bparam,
-                behaviour = behaviour,
-                acts = acts,
-                axisOffset = axisOffset,
-            };
-            return obj;
+            if (this == null || other == null)
+                return false;
+
+            return speed == other.speed && acts == other.acts && axis == other.axis;
         }
     }
 }

@@ -6,13 +6,18 @@ using System.Threading.Tasks;
 
 namespace LevelCombiner
 {
-    class SortedRegionList
+    public class SortedRegionList : IEquatable<SortedRegionList>
     {
         private SortedList<int, int> regionList;
 
         public SortedRegionList()
         {
             regionList = new SortedList<int, int>();
+        }
+
+        public bool Equals(SortedRegionList other)
+        {
+            return Enumerable.SequenceEqual(regionList, other.RegionList);
         }
 
         public SortedList<int, int> RegionList { get { return regionList; } }
@@ -22,7 +27,7 @@ namespace LevelCombiner
             if (start == 0)
                 throw new ArgumentNullException("ROM Region Start is 0, bug?");
 
-            if (length == 0)
+            if (length == 0 || length < 0)
                 return;
 
             regionList.TryGetValue(start, out int prevLength);
@@ -43,6 +48,14 @@ namespace LevelCombiner
 
             regionList.Add(start, length);
             Merge(start);
+        }
+
+        public void AddRegions(SortedRegionList list)
+        {
+            foreach (KeyValuePair<int, int> kvp in list.regionList)
+            {
+                AddRegion(kvp.Key, kvp.Value);
+            }
         }
 
         void Merge(int key)
@@ -80,27 +93,25 @@ namespace LevelCombiner
             return true;
         }
 
-        public void CutContigRegion(int size, int round, out int vertexStart, out int vertexLength, out bool isRegionTrimmed)
+        public void CutContigRegion(int size, out int vertexStart)
         {
-            // Cut a bit from available space for vertices
-            KeyValuePair<int, int> region = RegionList.First();
-            RegionList.RemoveAt(0);
-            vertexStart = region.Key;
-            vertexLength = region.Value;
+            var fittingRegions = RegionList.Where(kv => kv.Value >= size).ToList();
+            if (fittingRegions.Count() == 0)
+                throw new Exception("No contig region can be found!");
 
-            isRegionTrimmed = vertexLength > size;
-            // vertex buffer is size max size
-            if (isRegionTrimmed)
+            KeyValuePair<int, int> mostFittingRegion = fittingRegions.First();
+            foreach (KeyValuePair<int, int> region in RegionList)
             {
-                // Trim and put back data if left
-                RegionList.Add(vertexStart + size, vertexLength - size);
-                vertexLength = size;
+                if (region.Value < size)
+                    continue;
+
+                if (region.Value < mostFittingRegion.Value)
+                    mostFittingRegion = region;
             }
-            else
-            {
-                // Round to closest
-                vertexLength = vertexLength / round * round;
-            }    
+
+            RegionList.Remove(mostFittingRegion.Key);
+            RegionList.Add(mostFittingRegion.Key + size, mostFittingRegion.Value - size);
+            vertexStart = mostFittingRegion.Key;
         }
     }
 }

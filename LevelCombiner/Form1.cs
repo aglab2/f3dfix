@@ -59,7 +59,7 @@ namespace LevelCombiner
                     List<Region> regions = new List<Region>();
 
                     // 1st pass : find out where regions are
-                    LevelScript.PerformRegionParse(rom, regions, offset, out Dictionary<int, List<Scroll>> scrolls);
+                    LevelScript.PerformRegionParse(rom, regions, offset, out Dictionary<int, List<ScrollObject>> scrolls);
 
                     // Fill in data from rom
                     foreach (Region region in regions)
@@ -73,9 +73,9 @@ namespace LevelCombiner
                         if (region.state == RegionState.DisplayList)
                         {
                             DisplayListRegion dlRegion = (DisplayListRegion) region;
-                            scrolls.TryGetValue(1, out List<Scroll> areaScrolls);
+                            scrolls.TryGetValue(1, out List<ScrollObject> areaScrolls);
                             if (areaScrolls == null)
-                                areaScrolls = new List<Scroll>();
+                                areaScrolls = new List<ScrollObject>();
 
                             object[] row = { dlRegion, true, region.romStart.ToString("X"), i, dlRegion.isFogEnabled, dlRegion.isEnvcolorEnabled, new CombinerCommand(dlRegion.FCcmdfirst), CombinerCommand.GetNewCombiner(dlRegion), rom.segments.Clone(), areaScrolls };
                             dataGridView1.Rows.Add(row);
@@ -90,18 +90,14 @@ namespace LevelCombiner
         private void button1_Click(object sender, EventArgs e)
         {
             GC.Collect();
-            rom.PushOffset(0xD48B7);
-            rom.Write8(0x5C);
-            Checksum.CalculateChecksum(rom);
-            rom.PopOffset();
             foreach (DataGridViewRow row in dataGridView1.Rows)
             {
                 rom.segments = (SegmentDescriptor[]) row.Cells[8].Value;
-                List<Scroll> scrolls = (List<Scroll>) row.Cells[9].Value;
+                List<ScrollObject> scrolls = (List<ScrollObject>) row.Cells[9].Value;
 
                 DisplayListRegion dlRegion = (DisplayListRegion) row.Cells[0].Value;
                 Boolean fixingCheckBox = (Boolean)row.Cells[1].Value;
-                DisplayList.FixConfig config = new DisplayList.FixConfig(checkBoxNerfFog.Checked, checkBoxOptimizeVertex.Checked, checkBoxTrimNops.Checked, checkBoxGroupByTexture.Checked, checkBoxCombiners.Checked, checkBoxOtherMode.Checked, checkBoxNoFog.Checked);
+                DisplayList.FixConfig config = new DisplayList.FixConfig(checkBoxNerfFog.Checked, checkBoxOptimizeVertex.Checked, checkBoxTrimNops.Checked, checkBoxCombiners.Checked, checkBoxOtherMode.Checked, checkBoxNoFog.Checked);
 
                 if (fixingCheckBox)
                 {
@@ -115,14 +111,76 @@ namespace LevelCombiner
 
                     try
                     {
-                        if (checkBoxGroupByTexture.Checked)
-                            if (checkBoxRebuildVertices.Checked)
-                                DisplayList.PerformTriangleMapRebuild(rom, dlRegion, maxDlLength, scrolls);
-                            else
-                                DisplayList.PerformVisualMapRebuild(rom, dlRegion, maxDlLength);
-                        DisplayList.PerformRegionOptimize(rom, dlRegion, config);
+                        if (checkBoxGroupByTexture.Checked && !checkBoxRebuildVertices.Checked)
+                        {
+                            DisplayList.PerformVisualMapRebuild(rom, dlRegion, maxDlLength);
+                        }
+                        //DisplayList.PerformRegionOptimize(rom, dlRegion, config);
                     }
                     catch (Exception) { }
+                }
+            }
+
+            if (checkBoxGroupByTexture.Checked && checkBoxRebuildVertices.Checked)
+            {
+                Dictionary<int, List<DataGridViewRow> > levelDatas = new Dictionary<int, List<DataGridViewRow> >();
+                foreach (DataGridViewRow row in dataGridView1.Rows)
+                {
+                    Boolean fixingCheckBox = (Boolean)row.Cells[1].Value;
+                    if (!fixingCheckBox)
+                        continue;
+
+                    int level = (int) row.Cells[3].Value;
+                    if (!levelDatas.Keys.Contains(level))
+                    {
+                        levelDatas[level] = new List<DataGridViewRow>();
+                    }
+
+                    levelDatas[level].Add(row);
+                }
+
+                foreach (int level in levelDatas.Keys)
+                {
+                    ROM romCopy = (ROM) rom.Clone();
+                    try
+                    {
+                        List<DataGridViewRow> rows = levelDatas[level];
+                        rom.segments = (SegmentDescriptor[])rows[0].Cells[8].Value;
+                        List<ScrollObject> scrolls = (List<ScrollObject>)rows[0].Cells[9].Value;
+                        foreach (ScrollObject scr in scrolls)
+                        {
+                            scr.Disable(rom);
+                        }
+                        ScrollFactory factory = new ScrollFactory(scrolls);
+
+                        SortedRegionList vertexData = new SortedRegionList();
+                        List<KeyValuePair<DataGridViewRow, TriangleMap>> rowMaps = new List<KeyValuePair<DataGridViewRow, TriangleMap>>();
+
+                        foreach (DataGridViewRow row in rows)
+                        {
+                            DisplayListRegion dlRegion = (DisplayListRegion)row.Cells[0].Value;
+                            int maxDlLength = dlRegion.length;
+
+                            DisplayList.GetTriangleMap(rom, dlRegion, maxDlLength, scrolls, out TriangleMap map, out SortedRegionList levelVertexData);
+                            rowMaps.Add(new KeyValuePair<DataGridViewRow, TriangleMap>(row, map));
+                            vertexData.AddRegions(levelVertexData);
+                        }
+
+                        foreach (KeyValuePair<DataGridViewRow, TriangleMap> kvp in rowMaps)
+                        {
+                            DataGridViewRow row = kvp.Key;
+                            TriangleMap map = kvp.Value;
+
+                            DisplayListRegion dlRegion = (DisplayListRegion)row.Cells[0].Value;
+                            int maxDlLength = dlRegion.length;
+
+                            DisplayList.RebuildTriangleMap(rom, dlRegion, maxDlLength, map, vertexData, factory);
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        rom = romCopy;
+                    }
                 }
             }
 
@@ -151,7 +209,7 @@ namespace LevelCombiner
             }
             
             rom.SetSegment(segment, new SegmentDescriptor(addr, 0x00400000));
-            DisplayList.FixConfig config = new DisplayList.FixConfig(checkBoxNerfFog.Checked, checkBoxOptimizeVertex.Checked, checkBoxTrimNops.Checked, checkBoxGroupByTexture.Checked, checkBoxCombiners.Checked, checkBoxOtherMode.Checked, checkBoxNoFog.Checked);
+            DisplayList.FixConfig config = new DisplayList.FixConfig(checkBoxNerfFog.Checked, checkBoxOptimizeVertex.Checked, checkBoxTrimNops.Checked, checkBoxCombiners.Checked, checkBoxOtherMode.Checked, checkBoxNoFog.Checked);
 
             DisplayList.PerformRegionParse(rom, regions, offset, int.Parse(textBoxLayer.Text));
             foreach (Region region in regions)
@@ -170,7 +228,7 @@ namespace LevelCombiner
 
                 if (checkBoxGroupByTexture.Checked)
                     if (checkBoxRebuildVertices.Checked)
-                        DisplayList.PerformTriangleMapRebuild(rom, dlRegion, maxDLLength, new List<Scroll>());
+                        DisplayList.PerformTriangleMapRebuild(rom, dlRegion, maxDLLength, new List<ScrollObject>());
                     else
                         DisplayList.PerformVisualMapRebuild(rom, dlRegion, maxDLLength);
             
