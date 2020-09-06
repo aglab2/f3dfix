@@ -502,6 +502,9 @@ namespace LevelCombiner
 
             foreach (ScrollingTextureDescription brokenTd in brokenTextures)
             {
+                if (brokenTd.omitScrollCheck)
+                    continue;
+
                 // Figure out the way to "heal", either drop scroll or extend it
                 // If scroll does not start at the same  place, just drop it, such solution may backfire if 2 scrolls intersect
                 bool shouldDrop = brokenTd.scrollRegions.RegionList.First().Key != brokenTd.vertexRegions.RegionList.First().Key;
@@ -623,7 +626,7 @@ namespace LevelCombiner
                     map.AddHeaderCmd((UInt64)rom.Read64());
                     break;
                 case VisualMapParseStateCmd.Texture:
-                    state.td.Add((UInt64)rom.Read64());
+                    state.td.Add((UInt64)rom.Read64(), rom.GetSegmentedAddress(rom.offset));
                     break;
                 case VisualMapParseStateCmd.Footer:
                     map.AddFooterCmd((UInt64)rom.Read64());
@@ -638,7 +641,7 @@ namespace LevelCombiner
                     map.AddHeaderCmd((UInt64)rom.Read64());
                     break;
                 case VisualMapParseStateCmd.Texture:
-                    state.td.Add((UInt64)rom.Read64());
+                    state.td.Add((UInt64)rom.Read64(), rom.GetSegmentedAddress(rom.offset));
                     break;
                 case VisualMapParseStateCmd.Footer:
                     map.AddFooterCmd((UInt64)rom.Read64());
@@ -788,12 +791,32 @@ fini:
                 state.state = VisualMapParseStateCmd.Texture;
                 state.td = new TextureDescription();
                 if (state.envColorCmd != null)
-                    state.td.Add(state.envColorCmd.GetValueOrDefault());
+                    state.td.Add(state.envColorCmd.GetValueOrDefault(), 0 /*FIXME*/);
             }
             VisualMapParse_common(rom, map, state);
         }
 
 
+        private static Scroll FindMatchingScroll(List<ScrollObject> scrolls, int vertexSegmentedAddress, TextureDescription td)
+        {
+            foreach (ScrollObject scroll in scrolls)
+            {
+                if (scroll is EditorScroll editorScroll)
+                {
+                    if (editorScroll.segmentedAddress <= vertexSegmentedAddress
+                                                      && vertexSegmentedAddress < editorScroll.segmentedAddress + editorScroll.vertexCount * 0x10)
+                        return scroll;
+                }
+
+                if (scroll is TextureScroll textureScroll)
+                {
+                    if (td.f2SegmentedAddress == textureScroll.segmentedAddress)
+                        return scroll;
+                }
+            }
+
+            return null;
+        }
 
         private static void TriangleMapParse_cmd04(ROM rom, TriangleMap map, TriangleMapParseState state)
         {
@@ -802,16 +825,12 @@ fini:
 
             byte vertexCount = (byte) (((vertexDesc & 0xF0) >> 4) + 1);
             byte vertexOffset = (byte)((vertexDesc & 0x0F));
-            Int32 segmentedAddress = rom.Read32(4);
-            state.segmentedVertexBufferAddress = segmentedAddress;
+            Int32 vertexSegmentedAddress = rom.Read32(4);
+            state.segmentedVertexBufferAddress = vertexSegmentedAddress;
 
-            Int32 romPtr = rom.GetROMAddress(segmentedAddress);
+            Int32 romPtr = rom.GetROMAddress(vertexSegmentedAddress);
             if (romPtr == -1)
                 throw new ArgumentException("Invalid segmented address!");
-
-            // This is incorrect?
-            //Int32 romPtrEnd = romPtr + vertexCount * 0x10;
-            //segmentedAddress += vertexCount * 0x10;
 
             rom.PushOffset(romPtr);
             for (int vertex = vertexOffset; vertex < vertexCount; vertex++)
@@ -821,10 +840,10 @@ fini:
 
                 state.vbuf[vertex] = new Vertex((UInt64)lo, (UInt64)hi);
                 state.vbufRomStart[vertex] = rom.offset;
-                state.scrollBuf[vertex] = state.scrolls.Find(s => s.segmentedAddress <= segmentedAddress && segmentedAddress < s.segmentedAddress + s.vertexCount * 0x10);
-                
+                state.scrollBuf[vertex] = FindMatchingScroll(state.scrolls, vertexSegmentedAddress, state.td);
+
                 rom.AddOffset(0x10);
-                segmentedAddress += 0x10;
+                vertexSegmentedAddress += 0x10;
             }
             rom.PopOffset();
         }
@@ -865,8 +884,15 @@ fini:
 
                 state.td = new ScrollingTextureDescription();
                 state.td.AddRange(oldTd);
-                state.td.scroll = scroll; 
-                state.td.RegisterScroll(scroll);
+                state.td.scroll = scroll;
+                if (scroll is EditorScroll editorScroll)
+                {
+                    state.td.RegisterScroll(editorScroll);
+                }
+                if (scroll is TextureScroll)
+                {
+                    state.td.omitScrollCheck = true;
+                }
             }
 
             state.td.RegisterVertex(state.segmentedVertexBufferAddress + v0index * 0x10);
@@ -904,7 +930,7 @@ fini:
                 state.td = new ScrollingTextureDescription();
                 if (state.envColorCmd != null)
                 {
-                    state.td.Add(state.envColorCmd.GetValueOrDefault());
+                    state.td.Add(state.envColorCmd.GetValueOrDefault(), 0 /*FIXME*/);
                 }
             }
             TriangleMapParse_common(rom, map, state);
@@ -1086,6 +1112,7 @@ fini:
 
         private static void OptimizeParse_cmdFB(ROM rom, DisplayListRegion region, RegionOptimizeState state)
         {
+            /*
             Int64 cmd = rom.Read64();
             if (state.lastFBCmd == 0)
             {
@@ -1098,6 +1125,7 @@ fini:
                 rom.Write64(0);
                 return;
             }
+            */
         }
 
         private static void OptimizeParse_cmdFD(ROM rom, DisplayListRegion region, RegionOptimizeState state)

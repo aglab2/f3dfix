@@ -9,6 +9,7 @@ namespace LevelCombiner
     public class TextureDescription
     {
         protected List<UInt64> cmds = new List<UInt64>();
+        public int f2SegmentedAddress;
 
         public override bool Equals(object obj)
         {
@@ -41,6 +42,32 @@ namespace LevelCombiner
             return 0;
         }
 
+        public UInt64 GetSetTileCMD()
+        {
+            foreach (UInt64 cmd in cmds)
+            {
+                if ((cmd & 0xFF00000000000000) == 0xF200000000000000)
+                    return cmd;
+            }
+            return 0;
+        }
+
+        // F2 [SS S][T TT] 0[I] [WW W][H HH]
+        public int GetTileSizeX()
+        {
+            UInt64 cmd = GetSetTileCMD();
+            int Xconv = (int) (cmd & 0xfff);
+            return (Xconv >> 2) + 1;
+        }
+
+        public int GetTileSizeY()
+        {
+            UInt64 cmd = GetSetTileCMD();
+            int Yconv = (int)(cmd & 0xfff000);
+            Yconv >>= 12;
+            return (Yconv >> 2) + 1;
+        }
+
         public override string ToString()
         {
             foreach (UInt64 cmd in cmds)
@@ -52,27 +79,44 @@ namespace LevelCombiner
             return base.ToString();
         }
 
-        public void Add(UInt64 cmd)
+        public void Add(UInt64 cmd, int segmentedAddress)
         {
+            if ((cmd & 0xF200000000000000) == 0xF200000000000000)
+                f2SegmentedAddress = segmentedAddress;
+
             cmds.Add(cmd);
         }
 
-        public void AddRange(List<UInt64> otherCmds)
+        public void AddRange(TextureDescription other)
         {
-            cmds.AddRange(otherCmds);
+            cmds.AddRange(other.cmds);
+            f2SegmentedAddress = other.f2SegmentedAddress;
         }
 
         public static implicit operator List<UInt64>(TextureDescription td) => td.cmds;
+
+        public void MakeF3D(ROM rom)
+        {
+            foreach (UInt64 cmd in cmds)
+            {
+                rom.Write64(cmd);
+                if ((cmd & 0xF200000000000000) == 0xF200000000000000)
+                    f2SegmentedAddress = rom.GetSegmentedAddress(rom.offset);
+
+                rom.AddOffset(8);
+            }
+        }
     }
 
     public class ScrollingTextureDescription : TextureDescription
     {
-        public ScrollDesc scroll;
+        public Scroll scroll;
 
         public ScrollingTextureDescription() : base() 
         {
             scrollRegions = new SortedRegionList();
             vertexRegions = new SortedRegionList();
+            omitScrollCheck = false;
         }
 
         public override bool Equals(object obj)
@@ -117,8 +161,10 @@ namespace LevelCombiner
             return str;
         }
 
+        public bool omitScrollCheck;
+
         public SortedRegionList scrollRegions;
-        public void RegisterScroll(Scroll scr)
+        public void RegisterScroll(EditorScroll scr)
         {
             if (scr == null)
                 return;
@@ -130,6 +176,18 @@ namespace LevelCombiner
         public void RegisterVertex(int segAddr)
         {
             vertexRegions.AddRegion(segAddr, 0x10);
+        }
+
+        public int GetTileSizeForScroll()
+        {
+            switch (scroll.axis)
+            {
+                case TextureAxis.X:
+                    return GetTileSizeX();
+                case TextureAxis.Y:
+                    return GetTileSizeY();
+            }
+            return -1;
         }
     }
 
@@ -461,33 +519,47 @@ namespace LevelCombiner
 
     public class ScrollFactory
     {
+        static readonly int[] possibleF2Scrolls = { 0x0040f000 };
+        static readonly int[] possibleEditorScrolls = { 0x00402300, 0x13003420 };
+
         public ScrollFactory(List<ScrollObject> scrollers)
         {
-            editorScrollBehaviour = 0x402300;
+            HashSet<int> scrollBehaviours = new HashSet<int>(scrollers.Select(s => s.behavior));
+
+            editorScrollBehaviour = possibleEditorScrolls.Intersect(scrollBehaviours).FirstOrDefault();
+            if (editorScrollBehaviour == 0)
+                editorScrollBehaviour = 0x402300;
+
+            f2ScrollBehaviour = possibleF2Scrolls.Intersect(scrollBehaviours).FirstOrDefault();
+            if (f2ScrollBehaviour == 0)
+                f2ScrollBehaviour = 0x40f000;
+    
             this.scrollers = scrollers;
         }
 
-        public List<EditorScroll> GetScrolls(int vertexCount, int segmentedAddress, byte speed, byte acts, TextureAxis axis)
+        public List<ScrollObject> GetScrolls(int vertexCount, int segmentedAddress, ScrollingTextureDescription std)
         {
-            List<EditorScroll> scrolls = new List<EditorScroll>();
-            /*
-            while (vertexCount != 0)
-            {
-                ScrollObject scr = Fetch();
-                if (vertexCount > 0xff * 3)
-                {
-                    vertexCount -= 0xff * 3;
-                    scrolls.Add(new EditorScroll(0xff * 3, segmentedAddress, speed, acts, axis, editorScrollBehaviour, scr.romOffset));
-                }
-                else
-                {
-                    scrolls.Add(new EditorScroll(vertexCount, segmentedAddress, speed, acts, axis, editorScrollBehaviour, scr.romOffset));
-                    vertexCount = 0;
-                }
-            }
-            */
+            List<ScrollObject> scrolls = new List<ScrollObject>();
             ScrollObject scr = Fetch();
-            scrolls.Add(new EditorScroll(vertexCount, segmentedAddress, speed, acts, axis, editorScrollBehaviour, scr.romOffset));
+
+            int size = std.GetTileSizeForScroll();
+            int minSpeed = 0x400 / size;
+
+            /*
+            if (std.scroll.speed >= minSpeed)
+            {
+                scrolls.Add(new TextureScroll(std.f2SegmentedAddress, 
+                                              (byte) (std.scroll.speed * size / 0x40), std.scroll.acts, std.scroll.axis,
+                                              f2ScrollBehaviour, scr.romOffset));
+            }
+            else
+            */
+            {
+                scrolls.Add(new EditorScroll(vertexCount, segmentedAddress,
+                                             std.scroll.speed, std.scroll.acts, std.scroll.axis,
+                                             editorScrollBehaviour, scr.romOffset));
+            }
+
             return scrolls;
         }
 
@@ -499,6 +571,7 @@ namespace LevelCombiner
         }
 
         int editorScrollBehaviour;
+        int f2ScrollBehaviour;
         List<ScrollObject> scrollers;
     }
 
@@ -554,17 +627,9 @@ namespace LevelCombiner
             List<ScrollingTextureDescription> tds = map.Keys.ToList();
             tds.Sort(new ScrollingTextureDescriptionComp());
 
-            TextureDescription prevTd = null;
             foreach (ScrollingTextureDescription td in tds)
             {
-                if (prevTd != td)
-                    foreach (UInt64 cmd in (List<UInt64>)td)
-                    {
-                        rom.Write64(cmd);
-                        rom.AddOffset(8);
-                    }
-
-                prevTd = td;
+                td.MakeF3D(rom);
 
                 // Time to do optimization magic
                 List<Triangle> textureTris = map[td];
@@ -790,15 +855,18 @@ namespace LevelCombiner
                 if (td.scroll != null)
                 {
                     // Vertices must be rounded by 3 because skelux scrolls work like that
+                    /*
                     if (writtenVerticesCount % 3 != 0)
                     {
                         int leftToRoundVertices = 3 - (writtenVerticesCount % 3);
                         writtenVerticesCount += leftToRoundVertices;
+                        vertexPosition += leftToRoundVertices * 0x10;
                     }
+                    */
 
                     int segmentedAddress = rom.GetSegmentedAddress(allocVertexStart);
-                    List<EditorScroll> scrolls = factory.GetScrolls(writtenVerticesCount, segmentedAddress, td.scroll.speed, td.scroll.acts, td.scroll.axis);
-                    foreach(EditorScroll scroll in scrolls)
+                    List<ScrollObject> scrolls = factory.GetScrolls(writtenVerticesCount, segmentedAddress, td);
+                    foreach(ScrollObject scroll in scrolls)
                     {
                         scroll.WriteScroll(rom);
                     }

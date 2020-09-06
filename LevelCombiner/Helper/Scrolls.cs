@@ -5,8 +5,30 @@ using System.Text;
 
 namespace LevelCombiner
 {
+    public class HiddenFloatByte
+    {
+        public static byte Get(short A)
+        {
+            float floatA = A;
+            byte[] data = BitConverter.GetBytes(floatA);
+            return data[2];
+        }
+
+        public static short Make(byte val)
+        {
+            byte[] data = new byte[4];
+            data[2] = val;
+            data[3] = 0x46;
+            float fl = BitConverter.ToSingle(data, 0);
+            return Convert.ToInt16(fl);
+        }
+    }
+
     public class EditorScroll : ScrollObject
     {
+        public int vertexCount;
+        public int segmentedAddress;
+
         public EditorScroll(ROM rom) : base(rom)
         {
             segmentedAddress = 0x0e000000;
@@ -18,19 +40,22 @@ namespace LevelCombiner
             BParam2 = rom.Read16(0x12);
         }
 
-        public EditorScroll(int vertexCount, int segmentedAddress, byte speed, byte acts, TextureAxis axis, int behav, int offset) : base(vertexCount, segmentedAddress, speed, acts, axis, offset, behav)
-        { }
+        public EditorScroll(int vertexCount, int segmentedAddress, byte speed, byte acts, TextureAxis axis, int behav, int offset) : base(speed, acts, axis, offset, behav)
+        {
+            this.vertexCount = vertexCount;
+            this.segmentedAddress = segmentedAddress;
+        }
 
         public short X
         {
             get
             {
                 byte xval = (byte) (((segmentedAddress >> 16) & 0xff) + 2);
-                return MakeHiddenFloat(xval);
+                return HiddenFloatByte.Make(xval);
             }
             set
             {
-                byte xval = (byte) (GetHiddenFloatByte(value) - 2);
+                byte xval = (byte) (HiddenFloatByte.Get(value) - 2);
                 segmentedAddress = (int) ((segmentedAddress & 0xff00ffff) + (xval << 16));
             }
         }
@@ -44,7 +69,7 @@ namespace LevelCombiner
             set
             {
                 if (value != 0)
-                    vertexCount = GetHiddenFloatByte(value) * 3;
+                    vertexCount = HiddenFloatByte.Get(value) * 3;
             }
         }
 
@@ -65,11 +90,11 @@ namespace LevelCombiner
         {
             get
             {
-                return MakeHiddenFloat(speed);
+                return HiddenFloatByte.Make(speed);
             }
             set
             {
-                speed = GetHiddenFloatByte(value);
+                speed = HiddenFloatByte.Get(value);
             }
         }
 
@@ -112,23 +137,6 @@ namespace LevelCombiner
             }
         }
 
-
-        byte GetHiddenFloatByte(short A)
-        {
-            float floatA = A;
-            byte[] data = BitConverter.GetBytes(floatA);
-            return data[2];
-        }
-
-        short MakeHiddenFloat(byte val)
-        {
-            byte[] data = new byte[4];
-            data[2] = val;
-            data[3] = 0x46;
-            float fl = BitConverter.ToSingle(data, 0);
-            return Convert.ToInt16(fl);
-        }
-
         public override string ToString()
         {
             return segmentedAddress.ToString("X8") + " " + vertexCount.ToString();
@@ -148,9 +156,59 @@ namespace LevelCombiner
         }
     }
 
-    public class TextureScroll : Scroll
+    public class TextureScroll : ScrollObject
     {
+        public int segmentedAddress;
 
+        public TextureScroll(ROM rom) : base(rom)
+        {
+            segmentedAddress = rom.Read32(0x10);
+        }
+
+        public TextureScroll(int segmentedAddress, byte speed, byte acts, TextureAxis axis, int behav, int offset) : base(speed, acts, axis, offset, behav)
+        {
+            if (speed < 16)
+                throw new Exception("TextureScroll can't scroll less than 16 UVs per frame");
+
+            this.segmentedAddress = segmentedAddress;
+        }
+
+        public short X
+        {
+            get
+            {
+                return axis == TextureAxis.X ? HiddenFloatByte.Make((byte) (-speed / 16)) : (short) 0;
+            }
+            set
+            {
+                if (value != 0)
+                    speed = (byte) (-HiddenFloatByte.Get(value) * 16);
+            }
+        }
+
+        public short Y
+        {
+            get
+            {
+                return axis == TextureAxis.Y ? HiddenFloatByte.Make((byte) (-speed / 16)) : (short) 0;
+            }
+            set
+            {
+                if (value != 0)
+                    speed = (byte) (-HiddenFloatByte.Get(value) * 16);
+            }
+        }
+
+        public override void WriteScroll(ROM rom)
+        {
+            rom.PushOffset(romOffset);
+            rom.Write8(acts, 0x02);
+            rom.Write16(X, 0x04);
+            rom.Write16(Y, 0x06);
+            rom.Write32(segmentedAddress, 0x10);
+            rom.Write32(behavior, 0x14);
+            rom.PopOffset();
+        }
     }
 
     public abstract class ScrollObject : Scroll
@@ -164,7 +222,7 @@ namespace LevelCombiner
             behavior = rom.Read32(0x14);
         }
 
-        public ScrollObject(int vertexCount, int segmentedAddress, byte speed, byte acts, TextureAxis axis, int romOffset, int behavior) : base(vertexCount, segmentedAddress, speed, acts, axis)
+        public ScrollObject(byte speed, byte acts, TextureAxis axis, int romOffset, int behavior) : base(speed, acts, axis)
         {
             this.romOffset = romOffset;
             this.behavior = behavior;
@@ -186,41 +244,27 @@ namespace LevelCombiner
         Y,
     };
 
-    public class Scroll : ScrollDesc
-    {
-        public int vertexCount;
-        public int segmentedAddress;
-
-        public Scroll(int vertexCount, int segmentedAddress, byte speed, byte acts, TextureAxis axis) : base(speed, acts, axis)
-        {
-            this.vertexCount = vertexCount;
-            this.segmentedAddress = segmentedAddress;
-        }
-
-        public Scroll() { }
-    }
-
-    public class ScrollDesc : IEquatable<ScrollDesc>
+    public class Scroll : IEquatable<Scroll>
     {
         public byte speed;
         public byte acts;
         public TextureAxis axis;
 
-        public ScrollDesc(byte speed, byte acts, TextureAxis axis) 
+        public Scroll(byte speed, byte acts, TextureAxis axis) 
         {
             this.speed = speed;
             this.acts = acts;
             this.axis = axis;
         }
 
-        public ScrollDesc() { }
+        public Scroll() { }
 
         public override int GetHashCode()
         {
             return speed ^ acts ^ (int)axis;
         }
 
-        public bool Equals(ScrollDesc other)
+        public bool Equals(Scroll other)
         {
             if (this == null || other == null)
                 return false;

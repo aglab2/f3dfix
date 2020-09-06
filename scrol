@@ -1,2 +1,7 @@
 editor speed 4 = f2 scroll speed 1 (32x32)
+
+0x10 spd 0x1000 uv 0x20 pixels 
+
 editor speed 3 = f2 scroll speed 1 (32x64)
+
+0x8 spd 0x1000 uv 0x40 pixels 

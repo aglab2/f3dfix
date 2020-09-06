@@ -15,10 +15,6 @@ namespace LevelCombiner
 {
     public partial class Form1 : Form
     {
-        const int staticRelocationAddress = 0x00800000;
-        const int staticRelocationAddress0E = 0x0E000000 | staticRelocationAddress;
-        const int staticRelocationAddress19 = 0x19000000 | staticRelocationAddress;
-
         public Form1()
         {
             InitializeComponent();

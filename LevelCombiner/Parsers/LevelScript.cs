@@ -12,6 +12,7 @@ namespace LevelCombiner
     {
         const int scrollBehaviour = 0x00402300;
         const int scrollBehaviourLegacy = 0x13003420;
+        const int scrollF2 = 0x0040f000;
 
         delegate void RegionParseCmd(ROM rom, List<Region> regions, RegionParseState state);
         delegate void RelocationParseCmd(ROM rom, RelocationTable table, RegionParseState state);
@@ -499,7 +500,7 @@ namespace LevelCombiner
         private static void RegionParse_cmd24(ROM rom, List<Region> regions, RegionParseState state)
         {
             int behaviour = rom.Read32(0x14);
-            if (behaviour == scrollBehaviour || behaviour == scrollBehaviourLegacy)
+            if (behaviour == scrollBehaviour || behaviour == scrollBehaviourLegacy || behaviour == scrollF2)
             {
                 EditorScroll scroll = new EditorScroll(rom);
                 if (scroll.acts != 0)
