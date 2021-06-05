@@ -28,6 +28,7 @@ namespace LevelCombiner
     {
         public int vertexCount;
         public int segmentedAddress;
+        public bool isClassic;
 
         public EditorScroll(ROM rom) : base(rom)
         {
@@ -48,14 +49,18 @@ namespace LevelCombiner
 
         public short X
         {
+            // editor classic 0x8042 - hence -2
+            // editor 2.2 0x8065
             get
             {
-                byte xval = (byte) (((segmentedAddress >> 16) & 0xff) + 2);
+                byte xval = (byte) (((segmentedAddress >> 16) & 0xff) + (isClassic ? 0x2 : 0x65));
                 return HiddenFloatByte.Make(xval);
             }
             set
             {
-                byte xval = (byte) (HiddenFloatByte.Get(value) - 2);
+                byte hiddenByte = HiddenFloatByte.Get(value);
+                isClassic = hiddenByte < 0x65;
+                byte xval = (byte) (hiddenByte - (isClassic ? 0x2 : 0x65));
                 segmentedAddress = (int) ((segmentedAddress & 0xff00ffff) + (xval << 16));
             }
         }

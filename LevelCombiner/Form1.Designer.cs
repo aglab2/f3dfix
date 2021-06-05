@@ -211,6 +211,8 @@
             // checkBoxGroupByTexture
             // 
             this.checkBoxGroupByTexture.AutoSize = true;
+            this.checkBoxGroupByTexture.Checked = true;
+            this.checkBoxGroupByTexture.CheckState = System.Windows.Forms.CheckState.Checked;
             this.checkBoxGroupByTexture.Location = new System.Drawing.Point(12, 519);
             this.checkBoxGroupByTexture.Name = "checkBoxGroupByTexture";
             this.checkBoxGroupByTexture.Size = new System.Drawing.Size(152, 17);
@@ -382,6 +384,8 @@
             // checkBoxRebuildVertices
             // 
             this.checkBoxRebuildVertices.AutoSize = true;
+            this.checkBoxRebuildVertices.Checked = true;
+            this.checkBoxRebuildVertices.CheckState = System.Windows.Forms.CheckState.Checked;
             this.checkBoxRebuildVertices.Enabled = false;
             this.checkBoxRebuildVertices.Location = new System.Drawing.Point(12, 542);
             this.checkBoxRebuildVertices.Name = "checkBoxRebuildVertices";
