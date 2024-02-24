@@ -29,7 +29,7 @@ namespace LevelCombiner
     {
 
         public int romStart;
-        public int length;
+        public int maxLength;
         public RegionState state;
         public byte[] data;
 
@@ -38,10 +38,10 @@ namespace LevelCombiner
         public int number = -1;
         
         // Empty region init
-        public Region(int start, int length, RegionState state)
+        public Region(int start, int maxLength, RegionState state)
         {
             this.romStart = start;
-            this.length = length;
+            this.maxLength = maxLength;
             this.state = state;
 
             if (start == 0)
@@ -53,7 +53,7 @@ namespace LevelCombiner
         {
             string levelHeaderPath = PathComposer.ComposeName(dirname, state, area, model, number);
             this.data = File.ReadAllBytes(levelHeaderPath);
-            this.length = data.Length;
+            this.maxLength = data.Length;
 
             this.area = area;
             this.model = model;

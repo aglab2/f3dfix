@@ -29,7 +29,7 @@ namespace LevelCombiner
             int segment = SegmentedAddressHelper.GetSegment(segmentedAddress);
             int staticSegmentedAddress = SegmentedAddressHelper.GetStaticSegmentedAddress(segment);
 
-            length = region.length;
+            length = region.maxLength;
 
             if (!isFromStatic)
             {

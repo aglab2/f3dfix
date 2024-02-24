@@ -91,7 +91,7 @@ namespace LevelCombiner
                     switch (reg.state)
                     {
                         case RegionState.GraphicsData:
-                            compoundGraphicsData.AddRegion(reg.romStart, reg.length);
+                            compoundGraphicsData.AddRegion(reg.romStart, reg.maxLength);
                             break;
                         case RegionState.DisplayList:
                             reg.number = count++;
@@ -137,7 +137,7 @@ namespace LevelCombiner
                 if (cmdSize != 0xFF)
                     rom.AddOffset(cmdSize);
             }
-            while (rom.offset < region.length);
+            while (rom.offset < region.data.Length);
         }
 
         private static void RegionParse_common(ROM rom, List<Region> regions) { }

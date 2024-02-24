@@ -330,9 +330,9 @@ namespace LevelCombiner
                 func(rom, dlRegion, state);
                 rom.AddOffset(8);
             }
-            while (rom.offset < region.romStart + region.length);
+            while (rom.offset < region.romStart + region.data.Length);
             rom.PopOffset();
-            rom.ReadData(region.romStart, region.length, region.data);
+            rom.ReadData(region.romStart, region.data.Length, region.data);
         }
         public static void PerformRegionOptimize(ROM realRom, Region region, FixConfig config)
         {
@@ -351,7 +351,7 @@ namespace LevelCombiner
                 func(fakeRom, dlRegion, state);
                 fakeRom.AddOffset(8);
             }
-            while (fakeRom.offset < region.length);
+            while (fakeRom.offset < region.data.Length);
 
             // Now write data to real rom + trimming
             // bzero
@@ -363,7 +363,7 @@ namespace LevelCombiner
                     realRom.Write64(0x0101010101010101);
                     realRom.AddOffset(8);
                     fakeRom.AddOffset(8);
-                } while (fakeRom.offset < region.length);
+                } while (fakeRom.offset < region.data.Length);
             }
             realRom.PopOffset();
 
@@ -381,11 +381,11 @@ namespace LevelCombiner
 
                     realRom.Write64((ulong)cmd);
                     realRom.AddOffset(8);
-                } while (fakeRom.offset < region.length);
+                } while (fakeRom.offset < region.data.Length);
 
-                region.length = realRom.offset - start;
-                region.data = new byte[region.length];
-                realRom.ReadData(region.romStart, region.length, region.data);
+                int length = realRom.offset - start;
+                region.data = new byte[length];
+                realRom.ReadData(region.romStart, length, region.data);
             }
             realRom.PopOffset();
         }
@@ -408,7 +408,7 @@ namespace LevelCombiner
                 func(fakeRom, map, state);
                 fakeRom.AddOffset(8);
             }
-            while (fakeRom.offset < region.length);
+            while (fakeRom.offset < region.data.Length);
 
             ROM visualMapROM = new ROM(new byte[maxDLLength]);
             int visualMapLength = map.MakeF3D(visualMapROM);
@@ -424,7 +424,7 @@ namespace LevelCombiner
                     realRom.Write64(0x0101010101010101);
                     realRom.AddOffset(8);
                     fakeRom.AddOffset(8);
-                } while (fakeRom.offset < region.length);
+                } while (fakeRom.offset < region.data.Length);
             }
             realRom.PopOffset();
 
@@ -441,9 +441,9 @@ namespace LevelCombiner
                     realRom.AddOffset(8);
                 } while (visualMapROM.offset < visualMapLength);
 
-                region.length = realRom.offset - start;
-                region.data = new byte[region.length];
-                realRom.ReadData(region.romStart, region.length, region.data);
+                int length = realRom.offset - start;
+                region.data = new byte[length];
+                realRom.ReadData(region.romStart, length, region.data);
             }
             realRom.PopOffset();
         }
@@ -463,7 +463,7 @@ namespace LevelCombiner
                 func(realRom, map, state);
                 realRom.AddOffset(8);
             }
-            while (realRom.offset < region.romStart + region.length);
+            while (realRom.offset < region.romStart + region.data.Length);
             realRom.PopOffset();
 
             // Check map validity
@@ -552,21 +552,24 @@ namespace LevelCombiner
                 {
                     fakeRom.Write64(0x0101010101010101);
                     fakeRom.AddOffset(8);
-                } while (fakeRom.offset < region.romStart + region.length);
+                } while (fakeRom.offset < region.romStart + region.data.Length);
             }
             fakeRom.PopOffset();
 
             fakeRom.offset = region.romStart;
             int triangleMapLength = map.MakeF3D(fakeRom, vertexData, factory);
             if (triangleMapLength > maxDLLength)
+            {
+                MessageBox.Show("No memory for DL available :(");
                 throw new OutOfMemoryException("No memory for DL available :(");
+            }
 
             realRom.TransferFrom(fakeRom);
 
             realRom.offset = fakeRom.offset;
-            region.length = realRom.offset - region.romStart;
-            region.data = new byte[region.length];
-            realRom.ReadData(region.romStart, region.length, region.data);
+            int length = realRom.offset - region.romStart;
+            region.data = new byte[length];
+            realRom.ReadData(region.romStart, length, region.data);
         }
 
         public static void PerformTriangleMapRebuild(ROM realRom, Region region, int maxDLLength, List<ScrollObject> scrolls)
@@ -584,7 +587,7 @@ namespace LevelCombiner
                 func(realRom, map, state);
                 realRom.AddOffset(8);
             }
-            while (realRom.offset < region.romStart + region.length);
+            while (realRom.offset < region.romStart + region.data.Length);
             realRom.PopOffset();
 
             ROM fakeRom = (ROM)realRom.Clone();
@@ -596,21 +599,24 @@ namespace LevelCombiner
                 {
                     fakeRom.Write64(0x0101010101010101);
                     fakeRom.AddOffset(8);
-                } while (fakeRom.offset < region.romStart + region.length);
+                } while (fakeRom.offset < region.romStart + region.data.Length);
             }
             fakeRom.PopOffset();
 
             fakeRom.offset = region.romStart;
             int triangleMapLength = map.MakeF3D(fakeRom, state.vertexBytes, new ScrollFactory(scrolls));
             if (triangleMapLength > maxDLLength)
+            {
+                MessageBox.Show("No memory for DL available :(");
                 throw new OutOfMemoryException("No memory for DL available :(");
+            }
 
             realRom.TransferFrom(fakeRom);
 
             realRom.offset = fakeRom.offset;
-            region.length = realRom.offset - region.romStart;
-            region.data = new byte[region.length];
-            realRom.ReadData(region.romStart, region.length, region.data);
+            int length = realRom.offset - region.romStart;
+            region.data = new byte[length];
+            realRom.ReadData(region.romStart, length, region.data);
         }
 
 

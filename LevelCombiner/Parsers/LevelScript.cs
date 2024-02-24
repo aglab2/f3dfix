@@ -115,7 +115,7 @@ namespace LevelCombiner
             state.area = area;
 
             byte curCmdIndex;
-            while (rom.offset < region.length)
+            while (rom.offset < region.data.Length)
             {
                 curCmdIndex = rom.Read8();
                 byte curCmdSize = rom.Read8(1);

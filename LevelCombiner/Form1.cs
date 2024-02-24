@@ -60,8 +60,8 @@ namespace LevelCombiner
                     // Fill in data from rom
                     foreach (Region region in regions)
                     {
-                        region.data = new byte[region.length];
-                        rom.ReadData(region.romStart, region.length, region.data);
+                        region.data = new byte[region.maxLength];
+                        rom.ReadData(region.romStart, region.maxLength, region.data);
                     }
 
                     foreach (Region region in regions)
@@ -100,7 +100,7 @@ namespace LevelCombiner
                     if (checkBoxNoFog.Checked)
                         dlRegion.isFogEnabled = false;
 
-                    int maxDlLength = dlRegion.length;
+                    int maxDlLength = dlRegion.maxLength;
                     DisplayList.PerformRegionFix(rom, dlRegion, config);
                     if (checkBoxOptimizeVertex.Checked)
                         DisplayList.PerformRegionOptimize(rom, dlRegion, config);
@@ -155,7 +155,7 @@ namespace LevelCombiner
                         foreach (DataGridViewRow row in rows)
                         {
                             DisplayListRegion dlRegion = (DisplayListRegion)row.Cells[0].Value;
-                            int maxDlLength = dlRegion.length;
+                            int maxDlLength = dlRegion.maxLength;
 
                             DisplayList.GetTriangleMap(rom, dlRegion, maxDlLength, scrolls, out TriangleMap map, out SortedRegionList levelVertexData);
                             rowMaps.Add(new KeyValuePair<DataGridViewRow, TriangleMap>(row, map));
@@ -168,12 +168,12 @@ namespace LevelCombiner
                             TriangleMap map = kvp.Value;
 
                             DisplayListRegion dlRegion = (DisplayListRegion)row.Cells[0].Value;
-                            int maxDlLength = dlRegion.length;
+                            int maxDlLength = dlRegion.maxLength;
 
                             DisplayList.RebuildTriangleMap(rom, dlRegion, maxDlLength, map, vertexData, factory);
                         }
                     }
-                    catch (Exception)
+                    catch (Exception ex)
                     {
                         rom = romCopy;
                     }
@@ -214,10 +214,10 @@ namespace LevelCombiner
                     continue;
                 
                 DisplayListRegion dlRegion = (DisplayListRegion)region;
-                region.data = new byte[region.length];
-                rom.ReadData(region.romStart, region.length, region.data);
+                region.data = new byte[region.maxLength];
+                rom.ReadData(region.romStart, region.maxLength, region.data);
                 
-                int maxDLLength = dlRegion.length;
+                int maxDLLength = dlRegion.maxLength;
                 DisplayList.PerformRegionFix(rom, dlRegion, config);
                 if (checkBoxOptimizeVertex.Checked)
                     DisplayList.PerformRegionOptimize(rom, dlRegion, config);
