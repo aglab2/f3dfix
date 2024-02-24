@@ -41,10 +41,11 @@ namespace LevelCombiner
             BParam2 = rom.Read16(0x12);
         }
 
-        public EditorScroll(int vertexCount, int segmentedAddress, byte speed, byte acts, TextureAxis axis, int behav, int offset) : base(speed, acts, axis, offset, behav)
+        public EditorScroll(int vertexCount, int segmentedAddress, byte speed, byte acts, TextureAxis axis, int behav, int offset, bool isClassic) : base(speed, acts, axis, offset, behav)
         {
             this.vertexCount = vertexCount;
             this.segmentedAddress = segmentedAddress;
+            this.isClassic = isClassic;
         }
 
         public short X

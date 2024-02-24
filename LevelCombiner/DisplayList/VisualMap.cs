@@ -557,7 +557,7 @@ namespace LevelCombiner
             {
                 scrolls.Add(new EditorScroll(vertexCount, segmentedAddress,
                                              std.scroll.speed, std.scroll.acts, std.scroll.axis,
-                                             editorScrollBehaviour, scr.romOffset));
+                                             editorScrollBehaviour, scr.romOffset, isClassic));
             }
 
             return scrolls;
@@ -573,6 +573,7 @@ namespace LevelCombiner
         int editorScrollBehaviour;
         int f2ScrollBehaviour;
         List<ScrollObject> scrollers;
+        const bool isClassic = true;
     }
 
     // TODO: The way scrolls are implemented is bad: it will not change amount of scrolls used even though it should merge existing ones :(

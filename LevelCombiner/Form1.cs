@@ -69,11 +69,11 @@ namespace LevelCombiner
                         if (region.state == RegionState.DisplayList)
                         {
                             DisplayListRegion dlRegion = (DisplayListRegion) region;
-                            scrolls.TryGetValue(1, out List<ScrollObject> areaScrolls);
+                            scrolls.TryGetValue(region.area, out List<ScrollObject> areaScrolls);
                             if (areaScrolls == null)
                                 areaScrolls = new List<ScrollObject>();
 
-                            object[] row = { dlRegion, true, region.romStart.ToString("X"), i, dlRegion.isFogEnabled, dlRegion.isEnvcolorEnabled, new CombinerCommand(dlRegion.FCcmdfirst), CombinerCommand.GetNewCombiner(dlRegion), rom.segments.Clone(), areaScrolls };
+                            object[] row = { dlRegion, true, region.romStart.ToString("X"), i.ToString() + "/" + dlRegion.area.ToString(), dlRegion.isFogEnabled, dlRegion.isEnvcolorEnabled, new CombinerCommand(dlRegion.FCcmdfirst), CombinerCommand.GetNewCombiner(dlRegion), rom.segments.Clone(), areaScrolls };
                             dataGridView1.Rows.Add(row);
                         }
                     }
@@ -119,14 +119,14 @@ namespace LevelCombiner
 
             if (checkBoxGroupByTexture.Checked && checkBoxRebuildVertices.Checked)
             {
-                Dictionary<int, List<DataGridViewRow> > levelDatas = new Dictionary<int, List<DataGridViewRow> >();
+                Dictionary<string, List<DataGridViewRow> > levelDatas = new Dictionary<string, List<DataGridViewRow> >();
                 foreach (DataGridViewRow row in dataGridView1.Rows)
                 {
                     Boolean fixingCheckBox = (Boolean)row.Cells[1].Value;
                     if (!fixingCheckBox)
                         continue;
 
-                    int level = (int) row.Cells[3].Value;
+                    string level = (string) row.Cells[3].Value;
                     if (!levelDatas.Keys.Contains(level))
                     {
                         levelDatas[level] = new List<DataGridViewRow>();
@@ -135,12 +135,14 @@ namespace LevelCombiner
                     levelDatas[level].Add(row);
                 }
 
-                foreach (int level in levelDatas.Keys)
+                foreach (string level in levelDatas.Keys)
                 {
                     ROM romCopy = (ROM) rom.Clone();
                     try
                     {
                         List<DataGridViewRow> rows = levelDatas[level];
+
+                        // Because all level+area pair refer to the same segments and scrolls, we can just use the first one
                         rom.segments = (SegmentDescriptor[])rows[0].Cells[8].Value;
                         List<ScrollObject> scrolls = (List<ScrollObject>)rows[0].Cells[9].Value;
                         foreach (ScrollObject scr in scrolls)
@@ -173,7 +175,7 @@ namespace LevelCombiner
                             DisplayList.RebuildTriangleMap(rom, dlRegion, maxDlLength, map, vertexData, factory);
                         }
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
                         rom = romCopy;
                     }
